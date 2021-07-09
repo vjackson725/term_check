@@ -109,25 +109,99 @@ addId a = a ++ (toLists' (ident (length a)))
         listAdd _      _      = error "length mismatch"-}
 
 
-neg1 [] = []
-neg1 (x:xs) = (-1):(neg1 xs)
+sumy (x:xs) ys = 0:(sumy xs ys)
+sumy [] ys     = go ys 0
+    where
+        go [] 0     = []
+        go [] n     = 0:(go [] (n-1))
+        go (k:ks) n = 1:(go ks (n+1))
 
-bindLists []     = []
-bindLists (x:xs) = (x :&: (-1, 0)) : (bindLists xs)
+
+bindLists [] _ _ = []{-go 0
+    where
+        makeList l k | l == k || l == k+n = 1 : makeList (l+1) k
+                     | l >= 2*n           = []
+                     | otherwise          = (fromIntegral 0) : makeList (l+1) k
+        
+        go k | k < n = ((makeList 0 k) :>=: 0) : go (k+1) 
+             | otherwise      = []-}
+bindLists (b:bs) n lenx = ((idRow 0) :&: (0, 1)) : (b :==: 0) : (bindLists bs (n+1) lenx)
+    where
+        m = length b
+
+        idRow k | k == n + lenx   = 1:idRow (k+1)
+                | k == m          = []
+                | otherwise       = 0:idRow (k+1)
 -- | b' == zero b -> Nothing
 
-lin a = let (a', rest) = extract a [] []
+split :: [a] -> ([a], [a])
+split myList = splitAt (((length myList) + 1) `div` 2) myList
+
+listAdd (x:xs) (y:ys) = (x+y) : (listAdd xs ys)
+listAdd [] [] = []
+listAdd _ _ = error "length mismatch"
+
+pointwiseConc (x:xs) (y:ys) = (x++y) : (pointwiseConc xs ys)
+pointwiseConc [] [] = []
+pointwiseConc _ _ = error "length mismatch"
+{-free n = go 0
+    where
+        go k | k == 2*n  = []
+             | k < n    = go (k+1) 
+             | otherwise = (Free k) : go (k+1)-}
+
+{-invert a = let matrixA = fromLists' a
+               null = nullspace matrixA-}
+               
+
+lin a = let (nums, rest) = extract a [] []
             --b = nullspace (fromLists (addId a'))
             --b  = nullSum a'
-            rows = toLists $ tr (fromLists a')
-            prob = Minimize $ map sum a'
 
-            constr = Dense $ bindLists rows
+            -- List of rows
+            rows = toLists $ tr (fromLists nums) :: [[Double]]
 
+            -- Minimise sum Ay
+            --prob = Minimize $ (map sum nums) ++ (zero nums)
+            
+            --Our vector is y|x|z, I think
+            --It should be x|y|z
+            --
+            prob = Maximize $ (sumy nums rows)
+
+            -- -1 <= A(z + y) <= 0, z + y >= 0
+
+            -- Ax + y + z = 0
+            -- x >= 0 (automatic)
+            -- z >= 0 (automatic)
+            -- 0 <= y <= 1
+
+            -- Maybe we should be adding to the matrix
+
+            idMat = toLists $ ident (length rows)
+
+            constrMat = pointwiseConc rows (pointwiseConc idMat idMat)
+            constr = Dense $ bindLists constrMat 0 (length nums)
+
+            -- y >= 0, z >= -y (so, 0 is still an option for z)
             Optimal (b, bs) = simplex prob constr []
 
-            b' = toEnt (toList ((fromLists' a') #> (vector bs)))
-          in (b':rest)
+            -- Works in previous case because A(z + y) = 0, I think the exact equality is somehow relevant?
+            -- Want: to split up Ax as junk + [-1, -1, 0, -1, -1], because then we can just minimise the sum
+            -- of that to get the number of non-0 components. We sort of have that, but for some reason we don't
+            -- get an optimal soln. I suspect we'll probably always get [-1, -1, 0, 0, -1, ...] etc. for y,
+            -- but we're possibly not restricting z the right amount. I.e. it seems like it's always possible for
+            -- it to just settle on z = 0. 
+
+            -- The problem is, z 
+
+            {-(y, z) = split bs
+            x = listAdd y z
+            x' = toEnt (toList ((fromLists' nums) #> (vector x)))-}
+
+            x = take (length nums) bs
+            x' = toEnt (toList ((fromLists' nums) #> (vector x)))
+          in (x':rest)
             --b = linearSolveSVD (fromLists' a') (matrix 1 (neg1 a'))
             --b' = toEnt (toList ((fromLists' a') #> (vector b)))
             --b' = toEnt (join (toLists' b))
