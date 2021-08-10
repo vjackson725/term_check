@@ -2,6 +2,8 @@
 module PatternLambda where
 
 import Data.List (find)
+import Data.Map (Map) 
+import qualified Data.Map as Map
 
 (|>) x f = f x
 infixl 1 |>
@@ -10,8 +12,9 @@ data Term v =
   TVar v |
   TUndefined |
   TUnit |
-  TPair (Term v) (Term v) |
+  TBool Bool |
   TNatLit Int |
+  TPair (Term v) (Term v) |
   TIf (Term v) (Term v) (Term v) |
   TLambda v (Term v) |
   TApp (Term v) (Term v)
@@ -21,10 +24,30 @@ tlet :: v -> (Term v) -> (Term v) -> (Term v)
 tlet x s t = TApp (TLambda x t) s
 
 data Pattern v =
-  PVar v | PUnit | PPair (Pattern v) (Pattern v) | PNatLit Int
+  PVar v |
+  PUnit |
+  PNatLit Int |
+  PBool Bool |
+  PPair (Pattern v) (Pattern v)
   deriving (Eq, Show)
 
+{-
+  Functions are a name paried with a pattern/body list.
+  Patterns will be evaluated in order.
+-}
 type FunDef v = [(Pattern v, Term v)]
+
+data Value v =
+  VFunDef (FunDef v) |
+  VUnit |
+  VUndefined |
+  VNat Int |
+  VBool Bool |
+  VPair (Value v) (Value v) |
+  VContinuation (State v) v (Term v)
+  deriving (Eq, Show)
+
+type State v = Map v (Value v)
 
 type Binding v = [(v, Term v)]
 
@@ -57,3 +80,27 @@ fun_apply ((p,s_body):fs) s_arg =
     Just bnd -> Just $ subst_term bnd s_body
     Nothing  -> fun_apply fs s_body
 fun_apply [] t = Nothing
+
+-- big step; will loop on a non-terminating recursive definition
+eval :: (Eq v, Ord v) => State v -> Term v -> Value v
+eval st (TVar x) = Map.lookup x st |> maybe VUndefined id
+eval st TUndefined = VUndefined
+eval st TUnit = VUnit
+eval st (TPair t0 t1) = VPair (eval st t0) (eval st t1)
+eval st (TNatLit n) = VNat n
+eval st (TIf tb tt tf) =
+  case eval st tb of
+    VBool True  -> eval st tt
+    VBool False -> eval st tf
+    _ -> VUndefined
+eval st (TLambda x t) = VContinuation st x t
+eval st (TApp (TLambda x t0) t1) =
+  eval st (subst_term [(x, t1)] t0)
+eval st (TApp (TVar xfn) t) =
+  case Map.lookup xfn st of
+    Just (VFunDef fdefn) ->
+      case fun_apply fdefn t of
+        Just t' -> eval st t'
+        Nothing -> VUndefined
+    Nothing -> VUndefined
+eval st (TApp _ _) = VUndefined
