@@ -1,7 +1,9 @@
 
 module PatternLambda where
 
-import Data.List (find)
+import Data.List (find, permutations)
+import Control.Monad (join)
+import Data.Set (fromList, toList)
 import Data.Map (Map) 
 import qualified Data.Map as Map
 import Data.Bifunctor (second)
@@ -96,17 +98,37 @@ pattern_match (PBox rp p) (TBox rt s) | rp == rt =
 pattern_match _ _ = Nothing
 
 
-pattern_var_depths :: Eq v => Int -> Pattern v -> [(v,Int)]
-pattern_var_depths n (PVar x) = [(x,n)]
-pattern_var_depths n PUnit = []
-pattern_var_depths n (PPair p0 p1) = pattern_var_depths n p0 ++ pattern_var_depths n p1
-pattern_var_depths n PNatLit{} = []
-pattern_var_depths n PBoolLit{} = []
-pattern_var_depths n (PSumL p) = pattern_var_depths n p
-pattern_var_depths n (PSumR p) = pattern_var_depths n p
-pattern_var_depths n (PBox r p) =
-  filter ((/=) r . fst) $
-    pattern_var_depths (n+1) p
+data PathToken = L | R deriving (Eq, Show, Ord)
+
+type Path = [PathToken]
+
+fst' (a, b, c) = a
+--pattern_var_depths :: Eq v => Int -> Pattern v -> Path -> [(v,Int,Path)]
+pattern_var_depths n (PVar x) s = [(x,(fromIntegral n) :: Double, reverse s)]
+pattern_var_depths n PUnit s = []
+pattern_var_depths n (PPair p0 p1) s = pattern_var_depths n p0 s ++ pattern_var_depths n p1 s
+pattern_var_depths n PNatLit{} s = []
+pattern_var_depths n PBoolLit{} s = []
+pattern_var_depths n (PSumL p) s = pattern_var_depths n p (L:s)
+pattern_var_depths n (PSumR p) s = pattern_var_depths n p (R:s)
+pattern_var_depths n (PBox r p) s =
+  filter ((/=) r . fst') $
+    pattern_var_depths (n+1) p s
+
+--term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
+term_var_depths n (TVar x) s = [(x,(fromIntegral n) :: Double, reverse s)]
+term_var_depths n TUnit s = []
+term_var_depths n (TPair p0 p1) s = term_var_depths n p0 s ++ term_var_depths n p1 s
+term_var_depths n TNatLit{} s = []
+term_var_depths n TBoolLit{} s = []
+term_var_depths n (TSumL p) s = term_var_depths n p (L:s)
+term_var_depths n (TSumR p) s = term_var_depths n p (R:s)
+term_var_depths n (TBox r p) s =
+  filter ((/=) r . fst') $
+    term_var_depths (n+1) p s
+term_var_depths n (TUnbox p) s = term_var_depths (n-1) (TUnbox p) s 
+term_var_depths n (TApp p r) s = []
+
 
 app_primary_term :: Term v -> Term v
 app_primary_term (TApp s _) = app_primary_term s
@@ -155,11 +177,62 @@ eval st (TApp (TVar xfn) t) =
     Nothing -> VUndefined
 eval st (TApp _ _) = VUndefined
 
-matrixify :: Eq v => v -> FunDef v -> [([(v,Int)], [Term v])]
-matrixify name =
-  map
-    (\(p, s) ->
-      ( pattern_var_depths 0 p
-      , term_find_rec name s
-      )
-    )
+--matrixify :: Eq v => v -> FunDef v -> [([(v,Int,Path)], [Term v])]
+data Val = Na | Leq | Le deriving (Eq, Show)
+data PreMatrixEntry = N Double | P Path Path deriving (Eq, Show)
+data Entry = Num Double | Sym Val deriving (Eq, Show)
+matrixify name fun = pair_map make_matrix paths_taken matrix_temp
+    where
+
+        toSym x a b    | x == a    = Sym Le
+                       | otherwise = Sym Na
+        
+        make_matrix :: Path -> [Maybe PreMatrixEntry] -> [Entry]
+        make_matrix x ((Just (P a b)):ys) = (toSym x a b):(make_matrix x ys)
+        make_matrix x ((Just (N a)):ys)   = (Num a):(make_matrix x ys)
+        make_matrix x (Nothing:ys)        = make_matrix x ys
+
+        paths_taken = mkUniq $ join $ map (extract_ambig []) matrix_temp
+        
+        extract_ambig ret []                  = ret
+        extract_ambig ret ((Just (P a b)):xs) = extract_ambig (a:b:ret) xs
+        extract_ambig ret (x:xs)              = extract_ambig ret xs
+        
+        same_path [] _ = True
+        same_path _ [] = True
+        same_path (p:ps) (q:qs) | p == q    = same_path ps qs
+                                | otherwise = False
+        
+        mkUniq :: Ord a => [a] -> [a]
+        mkUniq = toList . fromList
+
+        --depth_compare :: Eq v => ((v,Int,Path), (v,Int,Path)) -> Maybe PreMatrixEntry
+        depth_compare ((v, n, from), (v', n', to)) | (v == v') && (n /= n') = Just (N (n' - n))
+                                                   | v == v'                = if same_path from to then Just (N 0) else Just (P from to)
+                                                   | otherwise              = Nothing
+
+        pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c]) 
+        pair_map f [] ys = []
+        pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
+        
+        --Gives us a list of rows
+        matrix_temp :: [[Maybe PreMatrixEntry]]
+        --([(v,Int,Path)], [(v,Int,Path)]) -> [Maybe PreMatrixEntry]
+        matrix_temp = map (uncurry (pair_map (curry depth_compare))) m 
+        --go (v, n, p) t | term_var_depths 0 t []
+
+        --m :: Eq v => v -> FunDef v -> [([(v,Int,Path)], [Term v])]
+
+        pair_list :: (a, [b]) -> [(a, b)]
+        pair_list (a, [])     = []
+        pair_list (a, (b:bs)) = (a, b) : (pair_list (a, bs)) 
+        {-all_pairs :: [(a, b)] -> (b -> [c]) -> [(a, c)]
+        all_pairs ((a, b):xs) f = pair_list (a, f b) ++ all_pairs xs-}
+        m = map
+            (\(p, s) ->
+              ( pattern_var_depths 0 p []
+              , join (map (\x -> term_var_depths 0 x []) (term_find_rec name s))
+              )
+            ) fun 
+        
+    
