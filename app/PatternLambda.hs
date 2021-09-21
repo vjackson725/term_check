@@ -22,7 +22,7 @@ data Term v =
   TApp (Term v) (Term v) |
   TSumL (Term v) |
   TSumR (Term v) |
-  TBox v (Term v) |
+  TBox (Term v) |
   TUnbox (Term v)
   deriving (Eq, Show)
 
@@ -37,7 +37,7 @@ data Pattern v =
   PPair (Pattern v) (Pattern v) |
   PSumL (Pattern v) |
   PSumR (Pattern v) |
-  PBox v (Pattern v)
+  PBox (Pattern v)
   deriving (Eq, Show)
 
 {-
@@ -74,7 +74,7 @@ subst_term b (TLambda x s) = TLambda x (subst_term (b |> filter ((/=) x . fst)) 
 subst_term b (TApp s0 s1) = TApp (subst_term b s0) (subst_term b s1)
 subst_term b (TSumL s) = TSumL (subst_term b s)
 subst_term b (TSumR s) = TSumR (subst_term b s)
-subst_term b (TBox r s) = TBox r (subst_term (b |> filter ((/=) r . fst)) s)
+subst_term b (TBox s) = TBox (subst_term b s)
 subst_term b (TUnbox s) = TUnbox (subst_term b s)
 
 pattern_match :: Eq v => Pattern v -> Term v -> Maybe (Binding v)
@@ -89,12 +89,12 @@ pattern_match (PNatLit n) (TNatLit m) | n == m = Just []
 pattern_match (PBoolLit n) (TBoolLit m) | n == m = Just []
 pattern_match (PSumL p) (TSumL s) = pattern_match p s
 pattern_match (PSumR p) (TSumR s) = pattern_match p s
-pattern_match (PBox rp p) (TBox rt s) | rp == rt =
-  do
+pattern_match (PBox p) (TBox s) = pattern_match p s
+  {-do
     b <- pattern_match p s
     if any (\(x,_) -> rp == x) b
     then Nothing
-    else return b
+    else return b-}
 pattern_match _ _ = Nothing
 
 
@@ -111,9 +111,7 @@ pattern_var_depths n PNatLit{} s = []
 pattern_var_depths n PBoolLit{} s = []
 pattern_var_depths n (PSumL p) s = pattern_var_depths n p (L:s)
 pattern_var_depths n (PSumR p) s = pattern_var_depths n p (R:s)
-pattern_var_depths n (PBox r p) s =
-  filter ((/=) r . fst') $
-    pattern_var_depths (n+1) p s
+pattern_var_depths n (PBox p) s = pattern_var_depths (n+1) p s
 
 --term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
 term_var_depths n (TVar x) s = [(x,(fromIntegral n) :: Double, reverse s)]
@@ -123,10 +121,8 @@ term_var_depths n TNatLit{} s = []
 term_var_depths n TBoolLit{} s = []
 term_var_depths n (TSumL p) s = term_var_depths n p (L:s)
 term_var_depths n (TSumR p) s = term_var_depths n p (R:s)
-term_var_depths n (TBox r p) s =
-  filter ((/=) r . fst') $
-    term_var_depths (n+1) p s
-term_var_depths n (TUnbox p) s = term_var_depths (n-1) (TUnbox p) s 
+term_var_depths n (TBox p) s = term_var_depths (n+1) p s
+term_var_depths n (TUnbox p) s = term_var_depths (n-1) p s 
 term_var_depths n (TApp p r) s = []
 
 
@@ -138,7 +134,7 @@ term_find_rec :: Eq v => v -> Term v -> [Term v]
 term_find_rec rn (TPair s0 s1) = term_find_rec rn s0 ++ term_find_rec rn s1
 term_find_rec rn (TSumL s) = term_find_rec rn s
 term_find_rec rn (TSumR s) = term_find_rec rn s
-term_find_rec rn (TBox r s) | r /= rn = term_find_rec rn s
+term_find_rec rn (TBox s) = term_find_rec rn s
 term_find_rec rn (TIf sb st sf) =
   term_find_rec rn sb ++ term_find_rec rn st ++ term_find_rec rn sf
 term_find_rec rn (TLambda x s) | x /= rn = term_find_rec rn s
@@ -235,4 +231,9 @@ matrixify name fun = pair_map make_matrix paths_taken matrix_temp
               )
             ) fun 
         
-    
+mat' name fun = map
+                (\(p, s) ->
+                  ( pattern_var_depths 0 p []
+                  , join (map (\x -> term_var_depths 0 x []) (term_find_rec name s))
+                  )
+                ) fun 
