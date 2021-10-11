@@ -17,7 +17,7 @@ tlet 'f' [ ( PBox 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TApp 'f' (TBox 'y' 
 
 [ ( PBox 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TBox 'y' (TSumR (TVar 'y')) ), ( PBox 'y' (PSumL PUnit), TBox 'y' (TSumL TUnit) )]
 
-
+[ ( PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TBox (TSumR (TVar "z"))) ), ( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
 --state = Map.fromList [("foo", VFunDef [(PVar "x", TPair (TVar "x") (TVar "x"))])]
 
 state = Map.fromList [("foo", VFunDef [ ( PBox "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TBox "y" (TSumR (TVar "y"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )])]
@@ -55,7 +55,18 @@ combine these columns like we have in this second matrix.
 We ought to show that these combinations are always possible, e.g. if we have something like:
 data t = A Nat | B Nat
 f (A 0)     = 0
-f (B 0)     = 0
 f (A (S n)) = f (B n)
 f (B n)     = S (f(A n))
+
+Which will either give the matrix
+? -1
+< 0
+
+Or:
+
+-1
+<
+
+i.e. we check the box difference first, and then the ordering on the disjuncts. So this doesn't give a counterexample.
+
 -}
