@@ -99,7 +99,7 @@ pattern_match (PBox p) (TBox s) = pattern_match p s
 pattern_match _ _ = Nothing
 
 
-data PathToken = L | R deriving (Eq, Show, Ord)
+data PathToken = La | Ra | Ld | Rd deriving (Eq, Show, Ord)
 
 type Path = [PathToken]
 
@@ -107,24 +107,24 @@ fst' (a, b, c) = a
 --pattern_var_depths :: Eq v => Int -> Pattern v -> Path -> [(v,Int,Path)]
 pattern_var_depths n (PVar x) s a b = [(x,(fromIntegral n) :: Double, reverse s, reverse a)]
 pattern_var_depths n PUnit s a b = []
-pattern_var_depths n (PPair p0 p1) s a b = if b then pattern_var_depths n p0 s (L:a) b ++ pattern_var_depths n p1 s (R:a) b else pattern_var_depths n p0 s a b ++ pattern_var_depths n p1 s a b
+pattern_var_depths n (PPair p0 p1) s a b = if b then pattern_var_depths n p0 s (La:a) b ++ pattern_var_depths n p1 s (Ra:a) b else pattern_var_depths n p0 s a b ++ pattern_var_depths n p1 s a b
 pattern_var_depths n PNatLit{} s a b = []
 pattern_var_depths n PBoolLit{} s a b = []
-pattern_var_depths n (PSumL p) s a b = pattern_var_depths n p (L:s) a b 
-pattern_var_depths n (PSumR p) s = pattern_var_depths n p (R:s) a b 
-pattern_var_depths n (PBox p) s = pattern_var_depths (n+1) p s a False
+pattern_var_depths n (PSumL p) s a b = pattern_var_depths n p (Ld:s) a b 
+pattern_var_depths n (PSumR p) s a b = pattern_var_depths n p (Rd:s) a b 
+pattern_var_depths n (PBox p) s a b = pattern_var_depths (n+1) p s a False
 
 --term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
 term_var_depths n (TVar x) s a b = [(x,(fromIntegral n) :: Double, reverse s, reverse a)]
 term_var_depths n TUnit s a b = []
-term_var_depths n (TPair p0 p1) s a b = term_var_depths n p0 s (L:a) b ++ term_var_depths n p1 s (R:a) b
+term_var_depths n (TPair p0 p1) s a b = if b then term_var_depths n p0 s (La:a) b ++ term_var_depths n p1 s (Ra:a) b else term_var_depths n p0 s a b ++ term_var_depths n p1 s a b
 term_var_depths n TNatLit{} s a b = []
 term_var_depths n TBoolLit{} s a b = []
-term_var_depths n (TSumL p) s a b = term_var_depths n p (L:s) a b 
-term_var_depths n (TSumR p) s a b = term_var_depths n p (R:s) a b 
+term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b 
+term_var_depths n (TSumR p) s a b = term_var_depths n p (Rd:s) a b 
 term_var_depths n (TBox p) s a b = term_var_depths (n+1) p s a False
-term_var_depths n (TUnbox p) s a b = term_var_depths (n-1) p s b
-term_var_depths n (TApp p r) s = []
+term_var_depths n (TUnbox p) s a b = term_var_depths (n-1) p s a b
+term_var_depths n (TApp p r) s a b = []
 
 
 app_primary_term :: Term v -> Term v
@@ -176,25 +176,28 @@ eval st (TApp _ _) = VUndefined
 
 --matrixify :: Eq v => v -> FunDef v -> [([(v,Int,Path)], [Term v])]
 data Val = Na | Leq | Le deriving (Eq, Show)
+
+-- Final Path is the argument in all disjuncts,
+-- P takes disjunct path from, disjunct path to and argument
 data PreMatrixEntry = S Val Path | N Double Path | P Path Path Path deriving (Eq, Show)
 data Entry = Num Double | Sym Val deriving (Eq, Show)
-matrixify name fun = pair_map make_matrix paths_taken matrix_temp
+matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
     where
 
-        toSym x a b    | x == a    = Sym Le
-                       | otherwise = Sym Na
+        --toSym x a b    | x == a    = Sym Le
+        --               | otherwise = Sym Na
         
         --make_matrix :: Path -> [Maybe PreMatrixEntry] -> [Entry]
-        make_matrix x ((P a b):ys) = (toSym x a b):(make_matrix x ys)
-        make_matrix x ((N a):ys)   = (Num a):(make_matrix x ys)
+        {-make_matrix x ((P a b):ys) = (toSym x a b):(make_matrix x ys)
+        make_matrix x ((N a):ys)   = (Num a):(make_matrix x ys)-}
         --make_matrix x (Nothing:ys)        = make_matrix x ys
 
-        paths_taken = mkUniq $ join $ map (extract_ambig []) matrix_temp
+        --paths_taken = mkUniq $ join $ map (extract_ambig []) matrix_temp
         
 
-        extract_ambig ret []                  = ret
+        {-extract_ambig ret []                  = ret
         extract_ambig ret ((Just (P a b)):xs) = extract_ambig (a:b:ret) xs
-        extract_ambig ret (x:xs)              = extract_ambig ret xs
+        extract_ambig ret (x:xs)              = extract_ambig ret xs-}
         
         same_path [] _ = True
         same_path _ [] = True
@@ -205,8 +208,11 @@ matrixify name fun = pair_map make_matrix paths_taken matrix_temp
         mkUniq = Set.toList . Set.fromList
 
         --depth_compare :: Eq v => ((v,Int,Path), (v,Int,Path)) -> Maybe PreMatrixEntry
-
+        
+        -- Checks if any arguments appear on the rhs that aren't on the lhs and puts a ? in that matrix entry
         gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -> a == arg) xs) == []]
+        
+        -- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
         depth_compare ((_, _, _, a), []) = N 0 a
         depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' Set.isSubsetOf v) && (n /= n') = N (n' - n) argFrom
                                                                         | (argFrom == argTo) && (v' Set.isSubsetOf v)              = if same_path from to then N 0 argFrom else P from to argFrom
@@ -220,23 +226,56 @@ matrixify name fun = pair_map make_matrix paths_taken matrix_temp
         --([(v,Int,Path)], [(v,Int,Path)]) -> [Maybe PreMatrixEntry]
         --matrix_temp = map (uncurry (pair_map (curry depth_compare))) m'
 
-
-        matrix_temp = map (\(ps, qs) -> map (\p -> depth_compare p qs) ps ++ (gain_check ps qs)) m'
+        --matrix_temp = map (\(ps, qs) -> map (\p -> depth_compare p qs) ps ++ (gain_check ps qs)) m'
+        matrixified = map (\a -> sortByArg a matWithDisjArgs) arguments
             where
-                argOf (P t f p) = p
+                --Gets the argument of a particular preMatrixEntry by just extracting the argument component
+                argOf (P f t p) = p
                 argOf (S v p) = p
                 argOF (N n p) = p
-                sortByArg a (x:xs) = let (l:ls) = [y | y <- x, argOF y == a]
-                                     in if (l:ls) == [] then 
+                
+                toEntry (P f t p) = Num 0
+                toEntry (S v p)   = Sym v
+                toEntry (N n p)   = Num n
+
+                -- Extracts all of the pre-matrix entries in a particular argument for all the recursive calls.
+                sortByArg a (x:xs) = let l = [y | y <- x, argOF y == a]
+                                     in if l == [] then (Num 0):(sortByArg a xs) else (map toEntry l) ++ sortByArg a xs
  
-                args = map union (map getArgs mat)
+                
+                matWithDisjArgs = map makeDisjArgsAllDisjs disjs mat
+                
+                makeDisjArgsAllDisjs ds call = call ++ ((map makeDisjArgs call) ds)
+
+                makeDisjArgs call d = makeDisjArgs 0 d call
+
+                makeDisjArgs' ret d [] = N ret d
+                makeDisjArgs' ret d ((P f t p):rs) | f == t = makeDisjArgs' ret d rs
+                                                   | f == d = makeDisjArgs' (ret - 1) d rs
+                                                   | t == d = makeDisjArgs' (ret + 1) d rs
+                                                   | otherwise = makeDisjArgs' ret d rs
+                makeDisjArgs' ret d (r:rs) = makeDisjArgs' ret d rs
+                
+                arguments = fst argsAndDisjs
+
+                disjs = snd argsAndDisjs
+                
+                argsAndDisjs = let r = map getArgsAndDisjs Set.empty Set.empty mat
+                                   args = map fst r
+                                   disjs = map snd r
+                               in (foldl Set.union Set.empty args, foldl Set.union Set.empty disjs)
                 mat = map recCall m' --is our temp matrix, then we do some processing on this
                 --etc for other kinds of args
-                getArgs ret [] = ret
-                getArgs ret ((P t f p):xs) = Set.union (Set.insert p ret) (getArgs xs)
-                getArgs ret ((S v p):xs) = Set.union (Set.insert p ret) (getArgs xs)
-                getArgs ret ((N n p):xs) = Set.union (Set.insert p ret) (getArgs xs)
                 
+                --Gets a set of all the arguments and disjuncts that appear in a recursive call
+                getArgsAndDisjs args disjs [] = (args, disjs)
+                getArgsAndDisjs args disjs ((P t f p):xs) = let args'  = (Set.insert p args)
+                                                                disjs' = Set.insert t (Set.insert f disjs)
+                                                            in getArgsAndDisjs args' disjs' xs
+                getArgsAndDisjs args disjs ((S v p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
+                getArgsAndDisjs args disjs ((N n p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
+                
+                -- Processes a single recursive call
                 recCall (ps, qs) = map (\p -> depth_compare p qs) ps ++ (gain_check ps qs) 
 
 
