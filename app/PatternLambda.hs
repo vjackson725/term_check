@@ -183,146 +183,121 @@ data PreMatrixEntry = S Val Path | N Double Path | P Path Path Path deriving (Eq
 data Entry = Num Double | Sym Val deriving (Eq, Show)
 
 matrixify :: Ord v => v -> FunDef v -> [[Entry]]
-matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
+matrixify name fun = matrixified 
     where
-
-        --toSym x a b    | x == a    = Sym Le
-        --               | otherwise = Sym Na
         
-        --make_matrix :: Path -> [Maybe PreMatrixEntry] -> [Entry]
-        {-make_matrix x ((P a b):ys) = (toSym x a b):(make_matrix x ys)
-        make_matrix x ((N a):ys)   = (Num a):(make_matrix x ys)-}
-        --make_matrix x (Nothing:ys)        = make_matrix x ys
-
-        --paths_taken = mkUniq $ join $ map (extract_ambig []) matrix_temp
-        
-
-        {-extract_ambig ret []                  = ret
-        extract_ambig ret ((Just (P a b)):xs) = extract_ambig (a:b:ret) xs
-        extract_ambig ret (x:xs)              = extract_ambig ret xs-}
-        
-        same_path [] _ = True
-        same_path _ [] = True
-        same_path (p:ps) (q:qs) | p == q    = same_path ps qs
-                                | otherwise = False
-        
-        {-mkUniq :: Ord a => [a] -> [a]
-        mkUniq = Set.toList . Set.fromList-}
-
-        mkUniq :: Eq a => [a] -> [a]
-        mkUniq = rdHelper []
-            where 
-                rdHelper seen [] = seen
-                rdHelper seen (x:xs) | x `elem` seen = rdHelper seen xs
-                                     | otherwise = rdHelper (seen ++ [x]) xs
-
-        --depth_compare :: Eq v => ((v,Int,Path), (v,Int,Path)) -> Maybe PreMatrixEntry
-        
-        -- Checks if any arguments appear on the rhs that aren't on the lhs and puts a ? in that matrix entry
-        gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -> a == arg) xs) == []]
-        
-        -- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
-        --depth_compare :: Ord v => ((Set v,Double,Path, Path), [(Set v,Double,Path, Path)]) -> PreMatrixEntry
-        depth_compare ((_, _, _, a), []) = N 0 a
-        depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n /= n') = N (n' - n) argFrom
-                                                                        | (argFrom == argTo) && (v' `Set.isSubsetOf` v)              = if same_path from to then N 0 argFrom else P from to argFrom
-                                                                        | otherwise              = depth_compare ((v, n, from, argFrom), xs)
-        pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c]) 
-        pair_map f [] ys = []
-        pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
-        
-        --Gives us a list of rows
-        --matrix_temp :: [[Maybe PreMatrixEntry]]
-        --([(v,Int,Path)], [(v,Int,Path)]) -> [Maybe PreMatrixEntry]
-        --matrix_temp = map (uncurry (pair_map (curry depth_compare))) m'
-
-        --matrix_temp = map (\(ps, qs) -> map (\p -> depth_compare p qs) ps ++ (gain_check ps qs)) m'
-        matrixified = map (\a -> sortByArg a matWithDisjArgs) arguments
-            where
-                --Gets the argument of a particular preMatrixEntry by just extracting the argument component
-                argOf (P f t p) = p
-                argOf (S v p) = p
-                argOF (N n p) = p
-                
-                toEntry (P f t p) = Num 0
-                toEntry (S v p)   = Sym v
-                toEntry (N n p)   = Num n
-
-                -- Extracts all of the pre-matrix entries in a particular argument for all the recursive calls.
-                sortByArg a [] = []
-                sortByArg a (x:xs) = let l = [y | y <- x, argOF y == a]
-                                     in if l == [] then (Num 0):(sortByArg a xs) else (map toEntry l) ++ sortByArg a xs
- 
-                
-                matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
-                
-                makeDisjArgsAllDisjs ds call = call ++ (map (makeDisjArgs call) ds)
-
-                makeDisjArgs call d = makeDisjArgs' 0 d call
-
-                makeDisjArgs' ret d [] = N ret d
-                makeDisjArgs' ret d ((P f t p):rs) | f == t = makeDisjArgs' ret d rs
-                                                   | f == d = makeDisjArgs' (ret - 1) d rs
-                                                   | t == d = makeDisjArgs' (ret + 1) d rs
-                                                   | otherwise = makeDisjArgs' ret d rs
-                makeDisjArgs' ret d (r:rs) = makeDisjArgs' ret d rs
-                
-                arguments = Set.toList $ fst argsAndDisjs
-
-                disjs = Set.toList $ snd argsAndDisjs
-                
-                argsAndDisjs = let r     = map (getArgsAndDisjs Set.empty Set.empty) mat
-                                   args  = map fst r
-                                   disjs = map snd r
-                               in (foldl Set.union Set.empty args, foldl Set.union Set.empty disjs)
-                
-                mat = map recCall m' --is our temp matrix, then we do some processing on this
-                --etc for other kinds of args
-                
-                --Gets a set of all the arguments and disjuncts that appear in a recursive call
-                getArgsAndDisjs args disjs [] = (args, disjs)
-                getArgsAndDisjs args disjs ((P t f p):xs) = let args'  = (Set.insert p args)
-                                                                disjs' = Set.insert t (Set.insert f disjs)
-                                                            in getArgsAndDisjs args' disjs' xs
-                getArgsAndDisjs args disjs ((S v p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
-                getArgsAndDisjs args disjs ((N n p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
-                
-                -- Processes a single recursive call
-                --recCall :: Eq v => ([(Set v,Double,Path, Path)], [(Set v,Double,Path, Path)]) -> [PreMatrixEntry]
-                recCall (ps, qs) = (map (\p -> depth_compare (p, qs)) ps) ++ (gain_check ps qs) 
-
-
-        --go (v, n, p) t | term_var_depths 0 t []
-
-        --m :: Eq v => v -> FunDef v -> [([(v,Int,Path)], [Term v])]
-
-        pair_list :: (a, [b]) -> [(a, b)]
-        pair_list (a, [])     = []
-        pair_list (a, (b:bs)) = (a, b) : (pair_list (a, bs)) 
-        {-all_pairs :: [(a, b)] -> (b -> [c]) -> [(a, c)]
-        all_pairs ((a, b):xs) f = pair_list (a, f b) ++ all_pairs xs-}
-
-        -- Want to go through both lists in m, process them into lists of (vars, depth, path, arg) where
-        -- we remove non-max depth variables within a particular argument
-        
-        m' = map (\(xs, ys) -> (list_convert xs, list_convert ys)) m
-
-        setify (v, n, disj, arg) = ((Set.singleton v), n, disj, arg)
-        list_convert xs = mkUniq $ map (\y -> process_depths (setify y) xs) xs --mkUniq $ (process_depths (setify x) xs):(list_convert xs)
-        
-        -- Gets max depth variables and puts them all in a set so we only have 1 entry per arg
-        process_depths ret [] = ret
-        process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs) | (arg == arg') && (n' > n)  = process_depths ((Set.singleton v'), n', disj', arg') xs
-                                                                     | (arg == arg') && (n' == n) = process_depths ((Set.insert v' vs), n, disj, arg) xs
-                                                                     | otherwise                  = process_depths (vs, n, disj, arg) xs
-        
-
         m = map
             (\(p, s) ->
               ( pattern_var_depths 0 p [] [] True
               , join (map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s))
               )
             ) fun 
+        
+        filtM = filter (\x -> snd x /= []) m
+
+        m' = map (\(xs, ys) -> (list_convert xs, list_convert ys)) filtM
+
+        mat = map recCall m' --is our temp matrix, then we do some processing on this
+        --etc for other kinds of args
+
+        arguments = Set.toList $ fst argsAndDisjs
+
+        disjs = Set.toList $ snd argsAndDisjs
+
+        argsAndDisjs = let r     = map (getArgsAndDisjs Set.empty Set.empty) mat
+                           args  = map fst r
+                           disjs = map snd r
+                       in (foldl Set.union Set.empty args, foldl Set.union Set.empty disjs)
+
+        matrixified = map (\a -> sortByArg a matWithDisjArgs) arguments
+
+        matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
+
+same_path [] _ = True
+same_path _ [] = True
+same_path (p:ps) (q:qs) | p == q    = same_path ps qs
+                        | otherwise = False
+
+mkUniq :: Eq a => [a] -> [a]
+mkUniq = rdHelper []
+    where 
+        rdHelper seen [] = seen
+        rdHelper seen (x:xs) | x `elem` seen = rdHelper seen xs
+                                | otherwise = rdHelper (seen ++ [x]) xs
+
+-- Checks if any arguments appear on the rhs that aren't on the lhs and puts a ? in that matrix entry
+gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -> a == arg) xs) == []]
+
+-- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
+--depth_compare :: Ord v => ((Set v,Double,Path, Path), [(Set v,Double,Path, Path)]) -> PreMatrixEntry
+depth_compare ((_, _, _, a), []) = N 0 a
+depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n /= n') = N (n' - n) argFrom
+                                                                | (argFrom == argTo) && (v' `Set.isSubsetOf` v)              = if same_path from to then N 0 argFrom else P from to argFrom
+                                                                | otherwise              = depth_compare ((v, n, from, argFrom), xs)
+pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c]) 
+pair_map f [] ys = []
+pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
+
+--matrix_temp = map (\(ps, qs) -> map (\p -> depth_compare p qs) ps ++ (gain_check ps qs)) m'
+
+
+--Gets the argument of a particular preMatrixEntry by just extracting the argument component
+argOf (P f t p) = p
+argOf (S v p) = p
+argOF (N n p) = p
+
+toEntry (P f t p) = Num 0
+toEntry (S v p)   = Sym v
+toEntry (N n p)   = Num n
+
+-- Extracts all of the pre-matrix entries in a particular argument for all the recursive calls.
+sortByArg a [] = []
+sortByArg a (x:xs) = let l = [y | y <- x, argOF y == a]
+                     in if l == [] then (Num 0):(sortByArg a xs) else (map toEntry l) ++ sortByArg a xs
+
+
+makeDisjArgsAllDisjs ds call = call ++ (map (makeDisjArgs call) ds)
+
+makeDisjArgs call d = makeDisjArgs' 0 d call
+
+makeDisjArgs' ret d [] = N ret d
+makeDisjArgs' ret d ((P f t p):rs)  | f == t = makeDisjArgs' ret d rs
+                                    | f == d = makeDisjArgs' (ret - 1) d rs
+                                    | t == d = makeDisjArgs' (ret + 1) d rs
+                                    | otherwise = makeDisjArgs' ret d rs
+makeDisjArgs' ret d (r:rs) = makeDisjArgs' ret d rs
+
+
+
+--Gets a set of all the arguments and disjuncts that appear in a recursive call
+getArgsAndDisjs args disjs [] = (args, disjs)
+getArgsAndDisjs args disjs ((P t f p):xs) = let args'  = (Set.insert p args)
+                                                disjs' = Set.insert t (Set.insert f disjs)
+                                            in getArgsAndDisjs args' disjs' xs
+getArgsAndDisjs args disjs ((S v p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
+getArgsAndDisjs args disjs ((N n p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
+
+-- Processes a single recursive call
+--recCall :: Eq v => ([(Set v,Double,Path, Path)], [(Set v,Double,Path, Path)]) -> [PreMatrixEntry]
+recCall (ps, qs) = (map (\p -> depth_compare (p, qs)) ps) ++ (gain_check ps qs) 
+
+pair_list :: (a, [b]) -> [(a, b)]
+pair_list (a, [])     = []
+pair_list (a, (b:bs)) = (a, b) : (pair_list (a, bs)) 
+
+-- Want to go through both lists in m, process them into lists of (vars, depth, path, arg) where
+-- we remove non-max depth variables within a particular argument
+
+
+setify (v, n, disj, arg) = ((Set.singleton v), n, disj, arg)
+list_convert xs = mkUniq $ map (\y -> process_depths (setify y) xs) xs --mkUniq $ (process_depths (setify x) xs):(list_convert xs)
+
+-- Gets max depth variables and puts them all in a set so we only have 1 entry per arg
+process_depths ret [] = ret
+process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs)    | (arg == arg') && (n' > n)  = process_depths ((Set.singleton v'), n', disj', arg') xs
+                                                                | (arg == arg') && (n' == n) = process_depths ((Set.insert v' vs), n, disj, arg) xs
+                                                                | otherwise                  = process_depths (vs, n, disj, arg) xs
+        
         
 mat' name fun = map
                 (\(p, s) ->
@@ -331,3 +306,4 @@ mat' name fun = map
                   )
                 ) fun 
 
+                
