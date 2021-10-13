@@ -1,4 +1,4 @@
-
+import PatternLambda
 import Data.List (splitAt)
 
 import Numeric.LinearAlgebra
@@ -180,3 +180,11 @@ termCheck a =
             termCheck a''
 
 main = putStrLn $ show $ termCheck [[]]
+
+checkTermination :: Ord v => v -> FunDef v -> Bool
+checkTermination name fun = termCheck (matrixify name fun)
+
+{-f (x:xs) y (z:z':zs) v w = f xs y zs (0:0:0:0:v) (0:w)
+f x (y:ys) (z:zs) v w = f (listAdd x x) ys zs (0:v) (0:w)
+f x y z (v:v':v'':vs) w = f x (listAdd y y) (0:z) vs (0:w)
+f _ _ _ _ w = w-}

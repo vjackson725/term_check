@@ -17,7 +17,7 @@ tlet 'f' [ ( PBox 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TApp 'f' (TBox 'y' 
 
 [ ( PBox 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TBox 'y' (TSumR (TVar 'y')) ), ( PBox 'y' (PSumL PUnit), TBox 'y' (TSumL TUnit) )]
 
-[ ( PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TBox (TSumR (TVar "z"))) ), ( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
+[ ( PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TVar "z") ), ( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
 --state = Map.fromList [("foo", VFunDef [(PVar "x", TPair (TVar "x") (TVar "x"))])]
 
 state = Map.fromList [("foo", VFunDef [ ( PBox "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TBox "y" (TSumR (TVar "y"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )])]
@@ -70,3 +70,39 @@ Or:
 i.e. we check the box difference first, and then the ordering on the disjuncts. So this doesn't give a counterexample.
 
 -}
+
+[ ( PBox (PSumR (PPair (PVar "x") (PVar "z"))), TApp (TVar "foo") (TVar "z") ), ( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
+
+{-
+foo (x:y:xs) = foo xs
+foo [] = []
+
+Ought to give matrix:
+[[-2]]
+-}
+[(PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "xs")))))),TApp (TVar "foo") (TVar "xs")),( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
+
+{-
+data BTree = B BTree BTree | L
+
+g (B l r) = (g l)
+g (B l r) = (g r)
+g L = 1
+
+(Think of above defn. as being non-deterministic)
+
+Note: the function,
+
+g (B l r) = (g l) + (g r)
+g L = 1
+
+is a bit difficult to write in this languge because it would use a TApp with an outside function, which would give [[?, ?]].
+
+To be correct about things, we need to provide a proof that + terminates.
+
+I might add a construct called TAppStops which applies a function and assumes it terminates for writing definitions like this,
+but for now I'm going to get as much mileage out of the current language constructs as possible.
+
+Ought to give matrix [[-1, -1]]
+-}
+[(PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "l")), (PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "r")), (PBox (PSumR PUnit), TBox (TSumR TUnit))]
