@@ -181,6 +181,8 @@ data Val = Na | Leq | Le deriving (Eq, Show)
 -- P takes disjunct path from, disjunct path to and argument
 data PreMatrixEntry = S Val Path | N Double Path | P Path Path Path deriving (Eq, Show)
 data Entry = Num Double | Sym Val deriving (Eq, Show)
+
+matrixify :: Ord v => v -> FunDef v -> [[Entry]]
 matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
     where
 
@@ -204,8 +206,15 @@ matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
         same_path (p:ps) (q:qs) | p == q    = same_path ps qs
                                 | otherwise = False
         
-        mkUniq :: Ord a => [a] -> [a]
-        mkUniq = Set.toList . Set.fromList
+        {-mkUniq :: Ord a => [a] -> [a]
+        mkUniq = Set.toList . Set.fromList-}
+
+        mkUniq :: Eq a => [a] -> [a]
+        mkUniq = rdHelper []
+            where 
+                rdHelper seen [] = seen
+                rdHelper seen (x:xs) | x `elem` seen = rdHelper seen xs
+                                     | otherwise = rdHelper (seen ++ [x]) xs
 
         --depth_compare :: Eq v => ((v,Int,Path), (v,Int,Path)) -> Maybe PreMatrixEntry
         
@@ -213,10 +222,11 @@ matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
         gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -> a == arg) xs) == []]
         
         -- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
+        --depth_compare :: Ord v => ((Set v,Double,Path, Path), [(Set v,Double,Path, Path)]) -> PreMatrixEntry
         depth_compare ((_, _, _, a), []) = N 0 a
-        depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' Set.isSubsetOf v) && (n /= n') = N (n' - n) argFrom
-                                                                        | (argFrom == argTo) && (v' Set.isSubsetOf v)              = if same_path from to then N 0 argFrom else P from to argFrom
-                                                                        | otherwise              = depth_compare (v', n', to, argFrom) xs
+        depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n /= n') = N (n' - n) argFrom
+                                                                        | (argFrom == argTo) && (v' `Set.isSubsetOf` v)              = if same_path from to then N 0 argFrom else P from to argFrom
+                                                                        | otherwise              = depth_compare ((v, n, from, argFrom), xs)
         pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c]) 
         pair_map f [] ys = []
         pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
@@ -239,15 +249,16 @@ matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
                 toEntry (N n p)   = Num n
 
                 -- Extracts all of the pre-matrix entries in a particular argument for all the recursive calls.
+                sortByArg a [] = []
                 sortByArg a (x:xs) = let l = [y | y <- x, argOF y == a]
                                      in if l == [] then (Num 0):(sortByArg a xs) else (map toEntry l) ++ sortByArg a xs
  
                 
-                matWithDisjArgs = map makeDisjArgsAllDisjs disjs mat
+                matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
                 
-                makeDisjArgsAllDisjs ds call = call ++ ((map makeDisjArgs call) ds)
+                makeDisjArgsAllDisjs ds call = call ++ (map (makeDisjArgs call) ds)
 
-                makeDisjArgs call d = makeDisjArgs 0 d call
+                makeDisjArgs call d = makeDisjArgs' 0 d call
 
                 makeDisjArgs' ret d [] = N ret d
                 makeDisjArgs' ret d ((P f t p):rs) | f == t = makeDisjArgs' ret d rs
@@ -256,14 +267,15 @@ matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
                                                    | otherwise = makeDisjArgs' ret d rs
                 makeDisjArgs' ret d (r:rs) = makeDisjArgs' ret d rs
                 
-                arguments = fst argsAndDisjs
+                arguments = Set.toList $ fst argsAndDisjs
 
-                disjs = snd argsAndDisjs
+                disjs = Set.toList $ snd argsAndDisjs
                 
-                argsAndDisjs = let r = map getArgsAndDisjs Set.empty Set.empty mat
-                                   args = map fst r
+                argsAndDisjs = let r     = map (getArgsAndDisjs Set.empty Set.empty) mat
+                                   args  = map fst r
                                    disjs = map snd r
                                in (foldl Set.union Set.empty args, foldl Set.union Set.empty disjs)
+                
                 mat = map recCall m' --is our temp matrix, then we do some processing on this
                 --etc for other kinds of args
                 
@@ -276,7 +288,8 @@ matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
                 getArgsAndDisjs args disjs ((N n p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
                 
                 -- Processes a single recursive call
-                recCall (ps, qs) = map (\p -> depth_compare p qs) ps ++ (gain_check ps qs) 
+                --recCall :: Eq v => ([(Set v,Double,Path, Path)], [(Set v,Double,Path, Path)]) -> [PreMatrixEntry]
+                recCall (ps, qs) = (map (\p -> depth_compare (p, qs)) ps) ++ (gain_check ps qs) 
 
 
         --go (v, n, p) t | term_var_depths 0 t []
@@ -294,11 +307,13 @@ matrixify name fun = matrixified --pair_map make_matrix paths_taken matrix_temp
         
         m' = map (\(xs, ys) -> (list_convert xs, list_convert ys)) m
 
-        list_convert (x:xs) = mkUniq $ (process_depths x xs):(list_convert xs)
+        setify (v, n, disj, arg) = ((Set.singleton v), n, disj, arg)
+        list_convert xs = mkUniq $ map (\y -> process_depths (setify y) xs) xs --mkUniq $ (process_depths (setify x) xs):(list_convert xs)
         
+        -- Gets max depth variables and puts them all in a set so we only have 1 entry per arg
         process_depths ret [] = ret
-        process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs) | (arg == arg') && (n' > n)  = process_depths (singleton v', n', disj', arg') xs
-                                                                     | (arg == arg') && (n' == n) = process_depths (insert v' vs, n, disj, arg) xs
+        process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs) | (arg == arg') && (n' > n)  = process_depths ((Set.singleton v'), n', disj', arg') xs
+                                                                     | (arg == arg') && (n' == n) = process_depths ((Set.insert v' vs), n, disj, arg) xs
                                                                      | otherwise                  = process_depths (vs, n, disj, arg) xs
         
 
@@ -315,3 +330,4 @@ mat' name fun = map
                   , join (map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s))
                   )
                 ) fun 
+
