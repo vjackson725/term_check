@@ -106,3 +106,52 @@ but for now I'm going to get as much mileage out of the current language constru
 Ought to give matrix [[-1, -1]]
 -}
 [(PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "l")), (PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "r")), (PBox (PSumR PUnit), TBox (TSumR TUnit))]
+
+{-
+A different comprotmise for this function is:
+
+
+g (B l r) = B (g l) (g r)
+g L = 1
+
+which ought to also give the matrix:
+
+[[-1, -1]]
+-}
+
+[(PBox (PSumL (PPair (PVar "l") (PVar "r"))), TBox ( TSumL ( TPair (TApp (TVar "g") (TVar "l")) (TApp (TVar "g") (TVar "r"))))), (PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "r")), (PBox (PSumR PUnit), TBox (TSumR TUnit))]
+
+{-
+f (x:y:xs) ys = f xs (0:ys)
+f xs (x:y:ys) = f (0:xs) ys
+
+Should give a matrix of [[-2, 1], [1, -2]], which should terminate
+-}
+[(PPair (PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "xs"))))))) (PVar "ys"), TApp (TVar "f") (TPair (TVar "xs") (TBox (TSumR (TPair (TNatLit 0) (TVar "ys")))))), (PPair (PVar "xs") (PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "ys"))))))), TApp (TVar "f") (TPair (TBox (TSumR (TPair (TNatLit 0) (TVar "xs")))) (TVar "ys")))]
+
+{-
+f (x:xs) y (z:z':zs) v w = f xs y zs (0:0:0:0:v) (0:w)
+f x (y:ys) (z:zs) v w = f (listAdd x x) ys zs (0:v) (0:w)
+f x y z (v:v':v'':vs) w = f x (listAdd y y) (0:z) vs (0:w)
+f _ _ _ _ w = w
+
+Ought to give matrix
+[[-1, ?, 0], [0, -1, ?], [-2, -1, 1], [4, 1, -3], [1, 1, 1]]
+
+Which should terminate
+-}
+
+{-
+A | B
+
+1 | a:as
+f (A [])     = []
+f (A (n:ns)) = f (B ns)
+f (B n)      = f(A n)
+
+Should terminate with the matrix
+
+[[-1, 0], [0, 1], [0, -1]]
+-}
+
+[(PSumL (PBox (PSumR (PPair (PVar "n") (PVar "ns")))), TApp (TVar "f") (TSumR (TVar "ns"))), (PSumR (PVar "n"), TApp (TVar "f") (TSumL (TVar "n")))]

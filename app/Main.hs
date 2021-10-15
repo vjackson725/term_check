@@ -5,20 +5,20 @@ import Numeric.LinearAlgebra
 import Numeric.LinearProgramming
 
 
-data Val = Na | Leq | Le 
+--data Val = Na | Leq | Le 
 
-instance Show Val where
+{-instance Show Val where
     show Na  = "?"
     show Leq = "<="
-    show Le  = "<"
+    show Le  = "<"-}
 
-instance Eq Val where
+{-instance Eq Val where
     (==) Na Na   = True
     (==) Leq Leq = True
     (==) Le Le   = True
-    (==) _ _     = False
+    (==) _ _     = False-}
 
-data Entry = Num Double | Sym Val deriving (Eq, Show)
+--data Entry = Num Double | Sym Val deriving (Eq, Show)
 type Tmatrix = [[Entry]]
 
 

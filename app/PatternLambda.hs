@@ -175,8 +175,12 @@ eval st (TApp (TVar xfn) t) =
 eval st (TApp _ _) = VUndefined
 
 --matrixify :: Eq v => v -> FunDef v -> [([(v,Int,Path)], [Term v])]
-data Val = Na | Leq | Le deriving (Eq, Show)
+data Val = Na | Leq | Le deriving Eq
 
+instance Show Val where
+    show Na  = "?"
+    show Leq = "<="
+    show Le  = "<"
 -- Final Path is the argument in all disjuncts,
 -- P takes disjunct path from, disjunct path to and argument
 data PreMatrixEntry = S Val Path | N Double Path | P Path Path Path deriving (Eq, Show)
@@ -200,18 +204,20 @@ matrixify name fun = matrixified
         mat = map recCall m' --is our temp matrix, then we do some processing on this
         --etc for other kinds of args
 
-        arguments = Set.toList $ fst argsAndDisjs
+        ads = argsAndDisjs matWithDisjArgs
+        arguments = Set.toList $ fst ads
 
-        disjs = Set.toList $ snd argsAndDisjs
-
-        argsAndDisjs = let r     = map (getArgsAndDisjs Set.empty Set.empty) mat
-                           args  = map fst r
-                           disjs = map snd r
-                       in (foldl Set.union Set.empty args, foldl Set.union Set.empty disjs)
+        disjs = Set.toList $ snd (argsAndDisjs mat)
 
         matrixified = map (\a -> sortByArg a matWithDisjArgs) arguments
 
         matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
+
+
+argsAndDisjs matr = let r     = map (getArgsAndDisjs Set.empty Set.empty) matr
+                        args  = map fst r
+                        dsjs = map snd r
+                    in (foldl Set.union Set.empty args, foldl Set.union Set.empty dsjs)
 
 same_path [] _ = True
 same_path _ [] = True
@@ -244,7 +250,7 @@ pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
 --Gets the argument of a particular preMatrixEntry by just extracting the argument component
 argOf (P f t p) = p
 argOf (S v p) = p
-argOF (N n p) = p
+argOf (N n p) = p
 
 toEntry (P f t p) = Num 0
 toEntry (S v p)   = Sym v
@@ -252,7 +258,7 @@ toEntry (N n p)   = Num n
 
 -- Extracts all of the pre-matrix entries in a particular argument for all the recursive calls.
 sortByArg a [] = []
-sortByArg a (x:xs) = let l = [y | y <- x, argOF y == a]
+sortByArg a (x:xs) = let l = [y | y <- x, argOf y == a]
                      in if l == [] then (Num 0):(sortByArg a xs) else (map toEntry l) ++ sortByArg a xs
 
 
