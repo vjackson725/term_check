@@ -1,4 +1,7 @@
-import PatternLambda
+
+module TerminationChecking.Examples where
+
+import TerminationChecking.PatternLambda
 
 -- Ought to give matrix [[-1]]
 f (x:xs) = f xs
@@ -25,7 +28,7 @@ state = Map.fromList [("foo", VFunDef [ ( PBox "y" (PSumR (PPair (PVar "x") (PVa
 
 state = Map.fromList [("foo", VFunDef [(PVar "x", TApp (TVar "foo") TUnit)])]
 -- Ought to give matrix [-1]
--- matrixify "foo" [("foo", VFunDef [ ( PBox "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TBox "y" (TSumR (TVar "y"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )])] == [-1] 
+-- matrixify "foo" [("foo", VFunDef [ ( PBox "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TBox "y" (TSumR (TVar "y"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )])] == [-1]
 [ ( PBox "z" (PSumR (PPair (PVar "x") (PBox "z" (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TBox "z" (TSumR (TVar "z"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )]
 
 

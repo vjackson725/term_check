@@ -5,7 +5,7 @@ import Numeric.LinearAlgebra
 import Numeric.LinearProgramming
 
 
---data Val = Na | Leq | Le 
+--data Val = Na | Leq | Le
 
 {-instance Show Val where
     show Na  = "?"
@@ -41,9 +41,9 @@ vecCheck vec | vec == [] = Na
 
 
 reduced v | vecCheck v == Le = True
-          | otherwise        = False  
+          | otherwise        = False
 --removeIndex :: Int -> [a] -> [a]
-removeIndex n xs = let (x, y:ys) = splitAt n xs 
+removeIndex n xs = let (x, y:ys) = splitAt n xs
                    in (x ++ ys)
 
 --lexic :: Tmatrix -> Tmatrix
@@ -57,7 +57,7 @@ lexic ret (x:xs) | vecCheck x == Na = lexic ret xs
                                            | otherwise = reduce (n+1) ys a
                    reduce n ((Sym y):ys) a | y == Le || y == Leq = reduce n ys (map (removeIndex n) a)
                                            | otherwise = reduce (n+1) ys a
-                    
+
 
 
 isEmpty []      = True
@@ -73,7 +73,7 @@ lexic' a | b == a = (False, [])
 toLists' a = toLists (tr a :: Matrix Double)
 fromLists' a = tr (fromLists a) :: Matrix Double
 
-addId a = a ++ (toLists' (ident (length a))) 
+addId a = a ++ (toLists' (ident (length a)))
 
 
 
@@ -115,7 +115,7 @@ Because of the limitations of the linear programming library we're using, x, y a
 as 1 vector x ++ y ++ z, and we just work with the appropriate parts of that big vector.
 -}
 lin a = let (nums, rest) = extract a [] []
-            
+
             -- List of rows
             rows = toLists $ tr (fromLists nums) :: [[Double]]
 
@@ -135,10 +135,10 @@ lin a = let (nums, rest) = extract a [] []
   where
     isInt []           = True
     isInt ((Num x):xs) = isInt xs
-    isInt ((Sym x):xs) = False 
+    isInt ((Sym x):xs) = False
 
     toInt' [] = []
-    toInt' ((Num x):xs) = x:(toInt' xs) 
+    toInt' ((Num x):xs) = x:(toInt' xs)
 
     toEnt [] = []
     toEnt (x:xs) = (Num x):(toEnt xs)
@@ -153,14 +153,14 @@ lin a = let (nums, rest) = extract a [] []
             go [] 0     = []
             go [] n     = 0:(go [] (n-1))
             go (k:ks) n = 1:(go ks (n+1))
-                       
+
 
 
 lin' a = let (b:bs) = lin a
          in case () of _
                         | reduced b -> (True, (b:bs))
                         | otherwise -> (False, (b:bs))
-          
+
 
 -- Checks if a function with associated matrix `a` terminates
 termCheck a =

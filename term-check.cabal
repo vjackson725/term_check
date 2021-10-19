@@ -23,6 +23,8 @@ extra-source-files: CHANGELOG.md
 
 executable term-check
     main-is:          Main.hs
+    other-modules:    PatternLambda
+                    , Examples
 
     -- Modules included in this executable, other than Main.
     -- other-modules:
@@ -32,5 +34,6 @@ executable term-check
     build-depends:    base ^>= 4.14.1.0
                     , hmatrix >= 0.20
                     , hmatrix-glpk >= 0.4.0
+                    , containers >= 0.6.0
     hs-source-dirs:   app
     default-language: Haskell2010
