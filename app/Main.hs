@@ -1,9 +1,13 @@
-import PatternLambda
+
 import Data.List (splitAt)
 
 import Numeric.LinearAlgebra
 import Numeric.LinearProgramming
+import Text.Parsec (parse)
 
+import TerminationChecking.Lang
+import TerminationChecking.Exec
+import TerminationChecking.Parser (parse_program)
 
 --data Val = Na | Leq | Le
 
@@ -179,7 +183,6 @@ termCheck a =
           else
             termCheck a''
 
-main = putStrLn $ show $ termCheck [[]]
 
 checkTermination :: Ord v => v -> FunDef v -> Bool
 checkTermination name fun = termCheck (matrixify name fun)
@@ -188,3 +191,11 @@ checkTermination name fun = termCheck (matrixify name fun)
 f x (y:ys) (z:zs) v w = f (listAdd x x) ys zs (0:v) (0:w)
 f x y z (v:v':v'':vs) w = f x (listAdd y y) (0:z) vs (0:w)
 f _ _ _ _ w = w-}
+
+-- main = putStrLn $ show $ termCheck [[]]
+
+main =
+  let s = "f a = b\nf 0 = c\nf a = d"
+   in case parse_program s of
+        Left  err  -> print err
+        Right prog -> print prog

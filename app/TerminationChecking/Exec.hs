@@ -1,5 +1,5 @@
 
-module TerminationChecking.PatternLambda where
+module TerminationChecking.Exec where
 
 import Data.List (find, permutations)
 import Control.Monad (join)
@@ -11,50 +11,16 @@ import Data.Bifunctor (second)
 
 import Debug.Trace
 
+import TerminationChecking.Lang
 
-(|>) x f = f x
-infixl 1 |>
 
-data Term v =
-  TVar v |
-  TUnit |
-  TBoolLit Bool |
-  TNatLit Int |
-  TPair (Term v) (Term v) |
-  TIf (Term v) (Term v) (Term v) |
-  TLambda v (Term v) |
-  TApp (Term v) (Term v) |
-  TSumL (Term v) |
-  TSumR (Term v) |
-  TBox (Term v) |
-  TUnbox (Term v)
-  deriving (Eq, Show)
-
-tlet :: v -> (Term v) -> (Term v) -> (Term v)
-tlet x s t = TApp (TLambda x t) s
-
-data Pattern v =
-  PVar v |
-  PUnit |
-  PBoolLit Bool |
-  PNatLit Int |
-  PPair (Pattern v) (Pattern v) |
-  PSumL (Pattern v) |
-  PSumR (Pattern v) |
-  PBox (Pattern v)
-  deriving (Eq, Show)
-
-{-
-  Functions are a name paried with a pattern/body list.
-  Patterns will be evaluated in order.
--}
-type FunDef v = [(Pattern v, Term v)]
+type State v = Map v (Value v)
 
 data Value v =
   VFunDef (FunDef v) |
   VUnit |
   VUndefined |
-  VNat Int |
+  VNat Integer |
   VBool Bool |
   VPair (Value v) (Value v) |
   VContinuation (State v) v (Term v) |
@@ -62,7 +28,6 @@ data Value v =
   VSumR (Value v)
   deriving (Eq, Show)
 
-type State v = Map v (Value v)
 
 type Binding v = [(v, Term v)]
 

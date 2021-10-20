@@ -1,7 +1,7 @@
 
 module TerminationChecking.Examples where
 
-import TerminationChecking.PatternLambda
+import TerminationChecking.Exec
 
 -- Ought to give matrix [[-1]]
 f (x:xs) = f xs
@@ -11,6 +11,8 @@ data BTree = B BTree BTree | L
 
 g (B l r) = (g l) + (g r)
 g L = 1
+
+{-
 
 -- Ought to have matrix [[-1, -1]]
 
@@ -158,3 +160,5 @@ Should terminate with the matrix
 -}
 
 [(PSumL (PBox (PSumR (PPair (PVar "n") (PVar "ns")))), TApp (TVar "f") (TSumR (TVar "ns"))), (PSumR (PVar "n"), TApp (TVar "f") (TSumL (TVar "n")))]
+
+-}

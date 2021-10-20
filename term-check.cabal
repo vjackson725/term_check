@@ -23,8 +23,10 @@ extra-source-files: CHANGELOG.md
 
 executable term-check
     main-is:          Main.hs
-    other-modules:    PatternLambda
-                    , Examples
+    other-modules:    TerminationChecking.Lang
+                    , TerminationChecking.Exec
+                    , TerminationChecking.Parser
+                    , TerminationChecking.Examples
 
     -- Modules included in this executable, other than Main.
     -- other-modules:
@@ -35,5 +37,6 @@ executable term-check
                     , hmatrix >= 0.20
                     , hmatrix-glpk >= 0.4.0
                     , containers >= 0.6.0
+                    , parsec >= 3.1.0
     hs-source-dirs:   app
     default-language: Haskell2010
