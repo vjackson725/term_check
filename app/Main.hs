@@ -195,7 +195,7 @@ f _ _ _ _ w = w-}
 -- main = putStrLn $ show $ termCheck [[]]
 
 main =
-  let s = "f a = b\nf 0 = c\nf a = d"
+  let s = "f a b c d = if a then b else c"
    in case parse_program s of
         Left  err  -> print err
         Right prog -> print prog

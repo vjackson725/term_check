@@ -30,12 +30,16 @@ lexer =
     , P.identLetter = alphaNum
     , P.opStart = oneOf "+-*/&|~<=>"
     , P.opLetter = oneOf "="
-    , P.reservedNames = [
-      "Left",
-      "Right",
-      "True",
-      "False"
-    ]
+    , P.reservedNames =
+      [ "Left"
+      , "Right"
+      , "True"
+      , "False"
+      , "Box"
+      , "if"
+      , "then"
+      , "else"
+      ]
     , P.reservedOpNames =
         [ "<"
         , "<="
@@ -92,7 +96,7 @@ function_line_parser :: Monad m => ParsecT String u m (String, (Pattern String, 
 function_line_parser =
   do
     fnname <- fnname_parser
-    args   <- pattern_parser
+    args   <- toplevel_pattern_parser
     _      <- symbol "="
     rest   <- term_parser
     return (fnname, (args, rest))
@@ -100,50 +104,66 @@ function_line_parser =
 fnname_parser :: Monad m => ParsecT String u m String
 fnname_parser = identifier <?> "fnname"
 
+toplevel_pattern_parser :: Monad m => ParsecT String u m (Pattern String)
+toplevel_pattern_parser =
+  (do
+    ps <- many1 pattern_parser
+    return (case ps of
+              p:[] -> p
+              p:ps -> foldr PPair p ps)
+  ) <?> "term"
+
 pattern_parser :: Monad m => ParsecT String u m (Pattern String)
 pattern_parser =
-  (   (symbol "()" *> return PUnit <?> "pattern unit")
-  <|> (parens (
-    do
-      pa <- pattern_parser
-      r <-
-        ((do
-          _ <- comma
-          pb <- pattern_parser
-          return $ PPair pa pb) <?> "pattern tuple")
-        <|> (return pa <?> "pattern parens")
-      return r
-  ))
-  <|> (parens pattern_parser <?> "pattern parens")
-  <|> (symbol "True"  *> return (PBoolLit True)  <?> "pattern True literal")
-  <|> (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
-  <|> (symbol "Left"  *> pattern_parser <?> "pattern left sum")
-  <|> (symbol "Right"  *> pattern_parser <?> "pattern right sum")
-  <|> (symbol "Box"  *> pattern_parser <?> "pattern box")
+  (   try ((symbol "()" *> return PUnit) <?> "pattern unit")
+  <|> (do
+        _ <- symbol "("
+        ps <- sepBy1 pattern_parser comma
+        _ <- symbol ")"
+        return
+          (case ps of
+            p:[] -> p -- parens
+            p:ps -> foldr PPair p ps)) -- tuple
+  <|> try (symbol "True"  *> return (PBoolLit True)  <?> "pattern True literal")
+  <|> try (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
+  <|> try (symbol "Left"  *> pattern_parser <?> "pattern left sum")
+  <|> try (symbol "Right" *> pattern_parser <?> "pattern right sum")
+  <|> try (symbol "Box"   *> pattern_parser <?> "pattern box")
   <|> ((PNatLit <$> natural) <?> "pattern natural literal")
   <|> (PVar <$> identifier <?> "pattern var")
   ) <?> "pattern"
 
 term_parser :: Monad m => ParsecT String u m (Term String)
 term_parser =
-  (   (symbol "()" *> return TUnit <?> "term unit")
-  <|> (parens (
-    do
-      pa <- term_parser
-      r <-
-        ((do
-          _ <- comma
-          pb <- term_parser
-          return $ TPair pa pb) <?> "term tuple")
-        <|> (return pa <?> "term parens")
-      return r
-  ))
-  <|> (parens term_parser <?> "term parens")
-  <|> (symbol "True"  *> return (TBoolLit True)  <?> "term True literal")
-  <|> (symbol "False" *> return (TBoolLit False) <?> "term False literal")
-  <|> (symbol "Left"  *> term_parser <?> "term left sum")
-  <|> (symbol "Right" *> term_parser <?> "term right sum")
-  <|> (symbol "Box"   *> term_parser <?> "term box")
-  <|> ((TNatLit <$> natural) <?> "term natural literal")
-  <|> (TVar <$> identifier <?> "term var")
+  (do
+    ts <- many1 single_term_parser
+    return (case ts of
+              t:[] -> t
+              t:ts -> foldl TApp t ts)
   ) <?> "term"
+
+single_term_parser :: Monad m => ParsecT String u m (Term String)
+single_term_parser =
+  (   try ((symbol "()" *> return TUnit) <?> "term unit")
+  <|> (do
+        _ <- symbol "("
+        ts <- sepBy1 term_parser comma
+        _ <- symbol ")"
+        return
+          (case ts of
+            t:[] -> t -- parens
+            t:ts -> foldr TPair t ts)) -- tuple
+  <|> ((TIf <$>
+        try (symbol "if"   *> term_parser) <*>
+        try (symbol "then" *> term_parser) <*>
+        try (symbol "else" *> term_parser)) <?> "term if-then-else")
+  <|> try (TBoolLit <$> (symbol "False" *> return False) <?> "term False literal")
+  <|> try (TBoolLit <$> (symbol "True"  *> return True) <?> "term True literal")
+  <|> try (TSumL    <$> (symbol "Left"  *> term_parser) <?> "term left sum")
+  <|> try (TSumR    <$> (symbol "Right" *> term_parser) <?> "term right sum")
+  <|> try (TBox     <$> (symbol "Box"   *> term_parser) <?> "term box")
+  <|> try (TUnbox   <$> (symbol "Unbox" *> term_parser) <?> "term unbox")
+  <|> (TNatLit  <$> natural <?> "term natural literal")
+  <|> (TVar     <$> identifier <?> "term var")
+  <|> (TLambda  <$> try (symbol "\\" *> identifier) <*> try (symbol "->" *> term_parser) <?> "term lambda")
+  ) <?> "term single"
