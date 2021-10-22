@@ -158,7 +158,7 @@ instance Show Val where
     show Le  = "<"
 -- Final Path is the argument in all disjuncts,
 -- P takes disjunct path from, disjunct path to and argument
-data PreMatrixEntry = S Val Path | N Double Path | P Path Path Path deriving (Eq, Show)
+data PreMatrixEntry = S Val Path | N Double Path | P Double Path Path Path deriving (Eq, Show)
 data Entry = Num Double | Sym Val deriving (Eq, Show)
 
 matrixify :: Ord v => v -> FunDef v -> [[Entry]]
@@ -212,8 +212,8 @@ gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -
 -- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
 --depth_compare :: Ord v => ((Set v,Double,Path, Path), [(Set v,Double,Path, Path)]) -> PreMatrixEntry
 depth_compare ((_, _, _, a), []) = N 0 a
-depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n /= n') = N (n' - n) argFrom
-                                                                | (argFrom == argTo) && (v' `Set.isSubsetOf` v)              = if same_path from to then N 0 argFrom else P from to argFrom
+depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n > n') = N (n' - n) argFrom
+                                                                | (argFrom == argTo) && (v' `Set.isSubsetOf` v)             = P (n' - n) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
                                                                 | otherwise              = depth_compare ((v, n, from, argFrom), xs)
 pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c])
 pair_map f [] ys = []
@@ -223,13 +223,13 @@ pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
 
 
 --Gets the argument of a particular preMatrixEntry by just extracting the argument component
-argOf (P f t p) = p
-argOf (S v p) = p
-argOf (N n p) = p
+argOf (P n f t p) = p
+argOf (S v p)     = p
+argOf (N n p)     = p
 
-toEntry (P f t p) = Num 0
-toEntry (S v p)   = Sym v
-toEntry (N n p)   = Num n
+toEntry (P n f t p) = Num n
+toEntry (S v p)     = Sym v
+toEntry (N n p)     = Num n
 
 -- Extracts all of the pre-matrix entries in a particular argument for all the recursive calls.
 sortByArg a [] = []
@@ -242,19 +242,19 @@ makeDisjArgsAllDisjs ds call = call ++ (map (makeDisjArgs call) ds)
 makeDisjArgs call d = makeDisjArgs' 0 d call
 
 makeDisjArgs' ret d [] = N ret d
-makeDisjArgs' ret d ((P f t p):rs)  | f == t = makeDisjArgs' ret d rs
-                                    | f == d = makeDisjArgs' (ret - 1) d rs
-                                    | t == d = makeDisjArgs' (ret + 1) d rs
-                                    | otherwise = makeDisjArgs' ret d rs
+makeDisjArgs' ret d ((P n f t p):rs) | f == t = makeDisjArgs' ret d rs
+                                     | f == d = makeDisjArgs' (ret - 1) d rs
+                                     | t == d = makeDisjArgs' (ret + 1) d rs
+                                     | otherwise = makeDisjArgs' ret d rs
 makeDisjArgs' ret d (r:rs) = makeDisjArgs' ret d rs
 
 
 
 --Gets a set of all the arguments and disjuncts that appear in a recursive call
 getArgsAndDisjs args disjs [] = (args, disjs)
-getArgsAndDisjs args disjs ((P t f p):xs) = let args'  = (Set.insert p args)
-                                                disjs' = Set.insert t (Set.insert f disjs)
-                                            in getArgsAndDisjs args' disjs' xs
+getArgsAndDisjs args disjs ((P n t f p):xs) = let args'  = (Set.insert p args)
+                                                  disjs' = Set.insert t (Set.insert f disjs)
+                                              in getArgsAndDisjs args' disjs' xs
 getArgsAndDisjs args disjs ((S v p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
 getArgsAndDisjs args disjs ((N n p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
 
