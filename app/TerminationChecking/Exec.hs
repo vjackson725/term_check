@@ -25,7 +25,9 @@ data Value v =
   VPair (Value v) (Value v) |
   VContinuation (State v) v (Term v) |
   VSumL (Value v) |
-  VSumR (Value v)
+  VSumR (Value v) |
+  VBox (Value v) |
+  VUnbox (Value v)
   deriving (Eq, Show)
 
 
@@ -116,7 +118,7 @@ fun_apply :: Eq v => FunDef v -> Term v -> Maybe (Term v)
 fun_apply ((p,s_body):fs) s_arg =
   case pattern_match p s_arg of
     Just bnd -> Just $ subst_term bnd s_body
-    Nothing  -> fun_apply fs s_body
+    Nothing  -> fun_apply fs s_arg
 fun_apply [] t = Nothing
 
 -- big step; will loop on a non-terminating recursive definition
@@ -140,6 +142,11 @@ eval st (TApp (TVar xfn) t) =
         Just t' -> eval st t'
         Nothing -> VUndefined
     Nothing -> VUndefined
+eval st (TBox e) = VBox (eval st e)
+eval st (TUnbox (TBox e)) = eval st e
+eval st (TUnbox e) = VUnbox (eval st e) 
+eval st (TSumL e) = VSumL (eval st e)
+eval st (TSumR e) = VSumR (eval st e)
 eval st (TApp _ _) = VUndefined
 
 --matrixify :: Eq v => v -> FunDef v -> [([(v,Int,Path)], [Term v])]
