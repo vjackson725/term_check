@@ -110,7 +110,7 @@ toplevel_pattern_parser =
     ps <- many1 pattern_parser
     return (case ps of
               p:[] -> p
-              p:ps -> foldr PPair p ps)
+              _:_ -> foldr1 PPair ps)
   ) <?> "term"
 
 pattern_parser :: Monad m => ParsecT String u m (Pattern String)
@@ -123,7 +123,7 @@ pattern_parser =
         return
           (case ps of
             p:[] -> p -- parens
-            p:ps -> foldr PPair p ps)) -- tuple
+            _:_ -> foldr1 PPair ps)) -- tuple
   <|> try (symbol "True"  *> return (PBoolLit True)  <?> "pattern True literal")
   <|> try (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
   <|> try (symbol "Left"  *> pattern_parser <?> "pattern left sum")
@@ -152,7 +152,7 @@ single_term_parser =
         return
           (case ts of
             t:[] -> t -- parens
-            t:ts -> foldr TPair t ts)) -- tuple
+            _:_ -> foldr1 TPair ts)) -- tuple
   <|> ((TIf <$>
         try (symbol "if"   *> term_parser) <*>
         try (symbol "then" *> term_parser) <*>
