@@ -9,6 +9,8 @@ import TerminationChecking.Lang
 import TerminationChecking.Exec
 import TerminationChecking.Parser (parse_program)
 
+import qualified Data.Map as M
+
 --data Val = Na | Leq | Le
 
 {-instance Show Val where
@@ -195,7 +197,10 @@ f _ _ _ _ w = w-}
 -- main = putStrLn $ show $ termCheck [[]]
 
 main =
-  let s = "f a b c d = if a then b else c"
+  let s = ("f (Left ()) n = 0\n\
+           \f (Right n) n = + 1 (f n)"
+          )
    in case parse_program s of
-        Left  err  -> print err
-        Right prog -> print prog
+        Left  err  -> putStrLn err
+        Right prog ->
+          print $ show $ matrixify "f" (prog M.! "f")

@@ -1,16 +1,17 @@
-{-# LANGUAGE PartialTypeSignatures #-}
-
 
 module TerminationChecking.Parser
   (parse_program)
 where
 
 import Control.Monad
+import Control.Applicative
+import Data.Bifunctor (first, second)
 import Data.Functor.Identity
 import qualified Data.Map as M
-
-import Text.Parsec
+import Text.Parsec (ParsecT, (<?>), try, many1, sepBy1, oneOf, parse, alphaNum, lower)
 import qualified Text.ParserCombinators.Parsec.Token as P
+
+import Debug.Trace (traceShowId)
 
 import TerminationChecking.Lang
 
@@ -29,7 +30,7 @@ lexer =
     , P.identStart = lower
     , P.identLetter = alphaNum
     , P.opStart = oneOf "+-*/&|~<=>"
-    , P.opLetter = oneOf "="
+    , P.opLetter = oneOf "+-*/&|~<=>"
     , P.reservedNames =
       [ "Left"
       , "Right"
@@ -40,17 +41,7 @@ lexer =
       , "then"
       , "else"
       ]
-    , P.reservedOpNames =
-        [ "<"
-        , "<="
-        , ">="
-        , "="
-        , "+"
-        , "-"
-        , "*"
-        , "/"
-        , "~"
-        ]
+    , P.reservedOpNames = []
     , P.caseSensitive = True
     }
 
@@ -75,18 +66,27 @@ natural = P.natural lexer
 comma :: Monad m => ParsecT String u m String
 comma = P.comma lexer
 
+operator :: Monad m => ParsecT String u m String
+operator = P.operator lexer
+
 --
 -- The actual parser
 --
 
-parse_program :: String -> Either _ _
-parse_program s =
-  let ls = lines s
-      epats = traverse (parse function_line_parser "") ls
-   in 
-    collapse_fnlines <$> epats
+type Prog = M.Map String (FunDef String)
 
-collapse_fnlines :: [(_, b)] -> M.Map _ [b]
+parse_program :: String -> Either String Prog
+parse_program s =
+  lines s
+  |> traverse (parse function_line_parser "")
+  |> first show
+  |> (>>= (traverse (\(n,(pat,t)) ->
+        case pattern_dup_vars pat of
+          [] -> Right (n,(pat,t))
+          vs -> Left ("Repeated vars in function \""++n++"\": "++show vs))))
+  |> second collapse_fnlines
+
+collapse_fnlines :: Ord v => [(v, b)] -> M.Map v [b]
 collapse_fnlines =
   foldl
     (\m (fnname, line) -> M.insertWith (\a b -> a ++ b) fnname [line] m)
@@ -139,7 +139,7 @@ term_parser =
     ts <- many1 single_term_parser
     return (case ts of
               t:[] -> t
-              t:ts -> foldl TApp t ts)
+              t:ts -> TApp t (foldr1 TPair ts))
   ) <?> "term"
 
 single_term_parser :: Monad m => ParsecT String u m (Term String)
@@ -163,7 +163,8 @@ single_term_parser =
   <|> try (TSumR    <$> (symbol "Right" *> term_parser) <?> "term right sum")
   <|> try (TBox     <$> (symbol "Box"   *> term_parser) <?> "term box")
   <|> try (TUnbox   <$> (symbol "Unbox" *> term_parser) <?> "term unbox")
-  <|> (TNatLit  <$> natural <?> "term natural literal")
-  <|> (TVar     <$> identifier <?> "term var")
-  <|> (TLambda  <$> try (symbol "\\" *> identifier) <*> try (symbol "->" *> term_parser) <?> "term lambda")
+  <|> (TNatLit <$> natural <?> "term natural literal")
+  <|> (TVar    <$> identifier <?> "term var")
+  <|> (TOp     <$> operator <?> "term operator")
+  <|> (TLambda <$> try (symbol "\\" *> identifier) <*> try (symbol "->" *> term_parser) <?> "term lambda")
   ) <?> "term single"
