@@ -1,15 +1,18 @@
+{-# LANGUAGE LambdaCase, ScopedTypeVariables #-}
 
-import Data.List (splitAt)
-
-import Numeric.LinearAlgebra
-import Numeric.LinearProgramming
-import Text.Parsec (parse)
+import Data.Foldable
+import Data.List
+import Options.Applicative
+import System.Exit
+import System.IO
 
 import TerminationChecking.Lang
 import TerminationChecking.Exec
 import TerminationChecking.Parser (parse_program)
 
 import qualified Data.Map as M
+
+{-
 
 --data Val = Na | Leq | Le
 
@@ -204,3 +207,73 @@ main =
         Left  err  -> putStrLn err
         Right prog ->
           print $ show $ matrixify "f" (prog M.! "f")
+
+-}
+
+pretty_matrix :: [[Entry]] -> String
+pretty_matrix m =
+  let lvl2 :: [[String]] = map (map (\case { Sym s -> "?"; Num n -> show n })) m
+      lvl1 :: [String] =  map (('[' :) . foldr (++) "]" . intersperse ", ") lvl2
+      lvl0 :: String =  ('[' :) . foldr (++) "]" . intersperse ", " $ lvl1
+    in lvl0
+
+
+type Command = (Maybe String, Maybe String, Bool)
+
+make_matrix_cmd :: Parser Command
+make_matrix_cmd =
+  (\filenm -> (Just filenm, Nothing, False)) <$> argument str (metavar "FILENM")
+
+matrix_check_cmd :: Parser Command
+matrix_check_cmd =
+  (\mat -> (Nothing, Just mat, True)) <$> argument str (metavar "MATRIX")
+
+program_check_cmd :: Parser Command
+program_check_cmd =
+  (\filenm -> (Just filenm, Nothing, True)) <$> argument str (metavar "FILENM")
+
+termcheck_argparser :: ParserInfo Command
+termcheck_argparser =
+  info
+    (subparser
+      (  command "makematrix" (info make_matrix_cmd (progDesc "Make a matrix from a program"))
+      <> command "matrixcheck" (info matrix_check_cmd (progDesc "Check a matrix is solvable"))
+      <> command "programcheck" (info program_check_cmd (progDesc "Check a program terminates"))
+      ) <**> helper)
+    (progDesc "Linear-Lexicographic program termination checker.")
+
+main :: IO ()
+main =
+  do
+    (filenmin, matsin, dotermcheck) <- customExecParser p termcheck_argparser
+    mats <-
+      (case filenmin of
+        Just filenm ->
+          do
+            prog <- parse_program <$> readFile filenm
+            case prog of
+              Left err ->
+                (hPutStr stderr $ "ERROR: " ++ err ++ "\n") >>
+                exitWith (ExitFailure 1)
+              Right progfns ->
+                return $ M.mapWithKey
+                          (\k v -> (k, matrixify k v))
+                          progfns
+        Nothing ->
+          (case matsin of
+            Just mats ->
+              (hPutStr stderr $ "ERROR: to be implemented\n") >>
+              exitWith (ExitFailure 2)
+            Nothing -> error "impossible arguments"))
+    _ <- if dotermcheck
+            then
+              (hPutStr stderr $ "ERROR: to be implemented\n") >>
+              exitWith (ExitFailure 2)
+            else
+              traverse_
+                (\(fnnm, mat) ->
+                  putStrLn (fnnm ++ ": " ++ pretty_matrix mat))
+                mats
+    return ()
+  where
+    p = prefs showHelpOnError
