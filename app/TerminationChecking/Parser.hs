@@ -78,6 +78,7 @@ type Prog = M.Map String (FunDef String)
 parse_program :: String -> Either String Prog
 parse_program s =
   lines s
+  |> filter ((/=) "")
   |> traverse (parse function_line_parser "")
   |> first show
   |> (>>= (traverse (\(n,(pat,t)) ->
