@@ -1,6 +1,6 @@
 
 module TerminationChecking.Parser
-  (parse_program)
+  -- (parse_program)
 where
 
 import Control.Monad
@@ -96,7 +96,7 @@ function_line_parser :: Monad m => ParsecT String u m (String, (Pattern String, 
 function_line_parser =
   do
     fnname <- fnname_parser
-    args   <- toplevel_pattern_parser
+    args   <- (foldr1 PPair <$> many1 pattern_parser) <?> "patterns"
     _      <- symbol "="
     rest   <- term_parser
     return (fnname, (args, rest))
@@ -104,31 +104,19 @@ function_line_parser =
 fnname_parser :: Monad m => ParsecT String u m String
 fnname_parser = identifier <?> "fnname"
 
-toplevel_pattern_parser :: Monad m => ParsecT String u m (Pattern String)
-toplevel_pattern_parser =
-  (do
-    ps <- many1 pattern_parser
-    return (case ps of
-              p:[] -> p
-              _:_ -> foldr1 PPair ps)
-  ) <?> "term"
-
 pattern_parser :: Monad m => ParsecT String u m (Pattern String)
 pattern_parser =
-  (   try ((symbol "()" *> return PUnit) <?> "pattern unit")
-  <|> (do
-        _ <- symbol "("
-        ps <- sepBy1 pattern_parser comma
-        _ <- symbol ")"
-        return
-          (case ps of
-            p:[] -> p -- parens
-            _:_ -> foldr1 PPair ps)) -- tuple
-  <|> try (symbol "True"  *> return (PBoolLit True)  <?> "pattern True literal")
-  <|> try (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
-  <|> try (symbol "Left"  *> pattern_parser <?> "pattern left sum")
-  <|> try (symbol "Right" *> pattern_parser <?> "pattern right sum")
-  <|> try (symbol "Box"   *> pattern_parser <?> "pattern box")
+  ((symbol "(" *>
+    ((symbol ")" *> return PUnit <?> "pattern unit")
+      <|> (do
+            p0 <- pattern_parser
+            ((symbol ")" *> return p0 <?> "pattern parenthesis")
+              <|> foldr1 PPair <$> ((:) <$> return p0 <*> sepBy1 pattern_parser comma) <?> "pattern tuple"))))
+  <|> (symbol "True"  *> return (PBoolLit True)  <?> "pattern True literal")
+  <|> (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
+  <|> (symbol "Left"  *> (PSumL <$> pattern_parser) <?> "pattern left sum")
+  <|> (symbol "Right" *> (PSumR <$> pattern_parser) <?> "pattern right sum")
+  <|> (symbol "Box"   *> (PBox <$> pattern_parser) <?> "pattern box")
   <|> ((PNatLit <$> natural) <?> "pattern natural literal")
   <|> (PVar <$> identifier <?> "pattern var")
   ) <?> "pattern"
