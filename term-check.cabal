@@ -23,10 +23,11 @@ extra-source-files: CHANGELOG.md
 
 executable term-check
     main-is:          Main.hs
-    other-modules:    TerminationChecking.Lang
+    other-modules:    TerminationChecking.Examples
                     , TerminationChecking.Exec
+                    , TerminationChecking.Lang
                     , TerminationChecking.Parser
-                    , TerminationChecking.Examples
+                    , TerminationChecking.Solver
 
     -- Modules included in this executable, other than Main.
     -- other-modules:

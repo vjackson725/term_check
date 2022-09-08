@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase, ScopedTypeVariables, TupleSections #-}
 
 import Data.Foldable
 import Data.List
@@ -6,209 +6,14 @@ import Options.Applicative
 import System.Exit
 import System.IO
 
-import TerminationChecking.Lang
-import TerminationChecking.Exec
-import TerminationChecking.Parser (parse_program)
-
 import qualified Data.Map as M
 
-{-
+import TerminationChecking.Exec
+import TerminationChecking.Lang
+import TerminationChecking.Parser (Prog, parse_program)
+import TerminationChecking.Solver (solve_mat)
 
---data Val = Na | Leq | Le
-
-{-instance Show Val where
-    show Na  = "?"
-    show Leq = "<="
-    show Le  = "<"-}
-
-{-instance Eq Val where
-    (==) Na Na   = True
-    (==) Leq Leq = True
-    (==) Le Le   = True
-    (==) _ _     = False-}
-
---data Entry = Num Double | Sym Val deriving (Eq, Show)
-type Tmatrix = [[Entry]]
-
-
---zero :: [Int] -> [Int]
-zero [] = []
-zero (x:xs) = 0 : (zero xs)
-
-vecCheck :: [Entry] -> Val
-vecCheck vec | vec == [] = Na
-             | otherwise = go True vec
-    where
-        go v [] | v == True           = Le
-                | otherwise           = Leq
-        go v ((Num y):ys) | y > 0     = Na
-                          | y == 0    = go False ys
-                          | otherwise = go v ys
-        go v ((Sym y):ys) | y == Na   = Na
-                          | y == Le   = go v ys
-                          | otherwise = go False ys
-
-
-reduced v | vecCheck v == Le = True
-          | otherwise        = False
---removeIndex :: Int -> [a] -> [a]
-removeIndex n xs = let (x, y:ys) = splitAt n xs
-                   in (x ++ ys)
-
---lexic :: Tmatrix -> Tmatrix
-lexic [] _ = []
-lexic ret [] = ret
-lexic ret (x:xs) | vecCheck x == Na = lexic ret xs
-                 | otherwise        = lexic (reduce 0 x ret) xs
-               where
-                   reduce n [] a = a
-                   reduce n ((Num y):ys) a | y < 0     = reduce n ys (map (removeIndex n) a)
-                                           | otherwise = reduce (n+1) ys a
-                   reduce n ((Sym y):ys) a | y == Le || y == Leq = reduce n ys (map (removeIndex n) a)
-                                           | otherwise = reduce (n+1) ys a
-
-
-
-isEmpty []      = True
-isEmpty ([]:xs) = isEmpty xs
-isEmpty _       = False
-
-lexic' a | b == a = (False, [])
-         | isEmpty b = (True, [])
-         | otherwise = (False, b)
-         where
-             b = lexic a a
-
-toLists' a = toLists (tr a :: Matrix Double)
-fromLists' a = tr (fromLists a) :: Matrix Double
-
-addId a = a ++ (toLists' (ident (length a)))
-
-
-
-bindLists [] _ _ = []
-bindLists (b:bs) n lenx = ((idRow 0) :&: (0, 1)) : (b :==: 0) : (bindLists bs (n+1) lenx)
-    where
-        m = length b
-
-        idRow k | k == n + lenx   = 1:idRow (k+1)
-                | k == m          = []
-                | otherwise       = 0:idRow (k+1)
-
-split :: [a] -> ([a], [a])
-split myList = splitAt (((length myList) + 1) `div` 2) myList
-
-listAdd (x:xs) (y:ys) = (x+y) : (listAdd xs ys)
-listAdd [] [] = []
-listAdd _ _ = error "length mismatch"
-
-pointwiseConc (x:xs) (y:ys) = (x++y) : (pointwiseConc xs ys)
-pointwiseConc [] [] = []
-pointwiseConc _ _ = error "length mismatch"
-
-{-
-Finds a linear combination of the columns without symbols such that all entries
-are less than or equal to 0 and the number of non-zero entries are maximized
-by solving the following linear programming problem:
-
-maximise sum y
-
-Ax + y + z = 0
-x >= 0
-z >= 0
-0 <= y <= 1
-
-where relational operators are taken pointwise.
-
-Because of the limitations of the linear programming library we're using, x, y and z are represented
-as 1 vector x ++ y ++ z, and we just work with the appropriate parts of that big vector.
--}
-lin a = let (nums, rest) = extract a [] []
-
-            -- List of rows
-            rows = toLists $ tr (fromLists nums) :: [[Double]]
-
-            -- Maximise sum y
-            prob = Maximize $ (sumy nums rows)
-
-            idMat = toLists $ ident (length rows)
-
-            constrMat = pointwiseConc rows (pointwiseConc idMat idMat)
-            constr = Dense $ bindLists constrMat 0 (length nums)
-
-            Optimal (b, bs) = simplex prob constr []
-
-            x = take (length nums) bs
-            x' = toEnt (toList ((fromLists' nums) #> (vector x)))
-          in (x':rest)
-  where
-    isInt []           = True
-    isInt ((Num x):xs) = isInt xs
-    isInt ((Sym x):xs) = False
-
-    toInt' [] = []
-    toInt' ((Num x):xs) = x:(toInt' xs)
-
-    toEnt [] = []
-    toEnt (x:xs) = (Num x):(toEnt xs)
-
-    extract [] num sym = (num, sym)
-    extract (x:xs) num sym | isInt x   = extract xs ((toInt' x):num) sym
-                           | otherwise = extract xs num (x:sym)
-
-    sumy (x:xs) ys = 0:(sumy xs ys)
-    sumy [] ys     = go ys 0
-        where
-            go [] 0     = []
-            go [] n     = 0:(go [] (n-1))
-            go (k:ks) n = 1:(go ks (n+1))
-
-
-
-lin' a = let (b:bs) = lin a
-         in case () of _
-                        | reduced b -> (True, (b:bs))
-                        | otherwise -> (False, (b:bs))
-
-
--- Checks if a function with associated matrix `a` terminates
-termCheck a =
-    let
-        (v, a') = lin' a
-    in
-      if v
-      then
-        v
-      else
-        let (v', a'') = lexic' a'
-        in
-          if a'' == []
-          then
-            v'
-          else
-            termCheck a''
-
-
-checkTermination :: Ord v => v -> FunDef v -> Bool
-checkTermination name fun = termCheck (matrixify name fun)
-
-{-f (x:xs) y (z:z':zs) v w = f xs y zs (0:0:0:0:v) (0:w)
-f x (y:ys) (z:zs) v w = f (listAdd x x) ys zs (0:v) (0:w)
-f x y z (v:v':v'':vs) w = f x (listAdd y y) (0:z) vs (0:w)
-f _ _ _ _ w = w-}
-
--- main = putStrLn $ show $ termCheck [[]]
-
-main =
-  let s = ("f (Left ()) n = 0\n\
-           \f (Right n) n = + 1 (f n)"
-          )
-   in case parse_program s of
-        Left  err  -> putStrLn err
-        Right prog ->
-          print $ show $ matrixify "f" (prog M.! "f")
-
--}
+import qualified Data.Map as M
 
 pretty_matrix :: [[Entry]] -> String
 pretty_matrix m =
@@ -217,20 +22,44 @@ pretty_matrix m =
       lvl0 :: String =  ('[' :) . foldr (++) "]" . intersperse ", " $ lvl1
     in lvl0
 
+--
+-- Compiler Phase and Phase Data
+--
 
-type Command = (Maybe String, Maybe String, Bool)
+data Phase = PhProgText | PhProgram | PhMatrix | PhSoln
+  deriving (Show, Eq, Ord)
+
+data PhaseData =
+  PhDatProgText String |
+  PhDatProgram Prog |
+  PhDatMatrix (M.Map String [[Entry]]) |
+  PhDatSoln (M.Map String (Maybe [Double]))
+  deriving (Show, Eq)
+
+isPhase :: Phase -> PhaseData -> Bool
+isPhase PhProgText  PhDatProgText{} = True
+isPhase PhProgram   PhDatProgram{}  = True
+isPhase PhMatrix    PhDatMatrix{}   = True
+isPhase PhSoln      PhDatSoln{}     = True
+isPhase _ _ = False
+
+--
+-- Program command-line commands
+--
+
+type Command = (String, Phase, Phase)
 
 make_matrix_cmd :: Parser Command
 make_matrix_cmd =
-  (\filenm -> (Just filenm, Nothing, False)) <$> argument str (metavar "FILENM")
+  (, PhProgText, PhMatrix) <$> argument str (metavar "FILENM")
 
 matrix_check_cmd :: Parser Command
 matrix_check_cmd =
-  (\mat -> (Nothing, Just mat, True)) <$> argument str (metavar "MATRIX")
+  (, PhMatrix, PhSoln) <$> argument str (metavar "MATRIX")
 
 program_check_cmd :: Parser Command
 program_check_cmd =
-  (\filenm -> (Just filenm, Nothing, True)) <$> argument str (metavar "FILENM")
+  (, PhProgText, PhSoln) <$> argument str (metavar "FILENM")
 
 termcheck_argparser :: ParserInfo Command
 termcheck_argparser =
@@ -242,38 +71,68 @@ termcheck_argparser =
       ) <**> helper)
     (progDesc "Linear-Lexicographic program termination checker.")
 
+--
+-- Main Program
+--
+
+doUntil :: Monad m => (a -> Bool) -> (a -> m a) -> a -> m a
+doUntil p stepfn a =
+  if p a
+    then return a
+    else
+      do
+        a' <- stepfn a
+        doUntil p stepfn a'
+
+phaseStep :: PhaseData -> IO PhaseData
+phaseStep (PhDatProgText progText) =
+  case parse_program progText of
+    Left err ->
+      (hPutStr stderr $ "ERROR: " ++ err ++ "\n") >>
+      exitWith (ExitFailure 1)
+    Right prog -> return . PhDatProgram $ prog
+phaseStep (PhDatProgram prog) =
+  return . PhDatMatrix $
+    M.mapWithKey (\k v -> matrixify k v) prog
+phaseStep (PhDatMatrix mat) =
+  return . PhDatSoln $ M.map solve_mat mat
+
 main :: IO ()
 main =
   do
-    (filenmin, matsin, dotermcheck) <- customExecParser p termcheck_argparser
-    mats <-
-      (case filenmin of
-        Just filenm ->
-          do
-            prog <- parse_program <$> readFile filenm
-            case prog of
-              Left err ->
-                (hPutStr stderr $ "ERROR: " ++ err ++ "\n") >>
-                exitWith (ExitFailure 1)
-              Right progfns ->
-                return $ M.mapWithKey
-                          (\k v -> (k, matrixify k v))
-                          progfns
-        Nothing ->
-          (case matsin of
-            Just mats ->
-              (hPutStr stderr $ "ERROR: to be implemented\n") >>
-              exitWith (ExitFailure 2)
-            Nothing -> error "impossible arguments"))
-    _ <- if dotermcheck
-            then
-              (hPutStr stderr $ "ERROR: to be implemented\n") >>
-              exitWith (ExitFailure 2)
-            else
-              traverse_
-                (\(fnnm, mat) ->
-                  putStrLn (fnnm ++ ": " ++ pretty_matrix mat))
-                mats
+    (filenm, startPhase, endPhase) <- customExecParser p termcheck_argparser
+    -- Read file
+    filetext <- readFile filenm
+    -- Create start phase data
+    phin <-
+      case startPhase of 
+        PhProgText -> return $ PhDatProgText filetext
+        PhProgram  ->
+          -- TODO: filetext to abstract program
+          error "ERROR: abstract program phase start not implemented yet"
+        PhMatrix   ->
+          -- TODO: filetext to matrix
+          error "ERROR: matrix phase start not implemented yet\n"
+        PhSoln     ->
+          (hPutStr stderr $ "ERROR: can't start in solution phase\n") >>
+          exitWith (ExitFailure 1)
+    -- Run program
+    result <- doUntil (isPhase endPhase) phaseStep phin
+    -- Output results
+    _ <-
+      case result of
+        PhDatProgText progtext ->
+          (hPutStr stderr $ "ERROR: can't end in read file phase\n") >>
+          exitWith (ExitFailure 1)
+        PhDatProgram prog ->
+          putStrLn $ show prog
+        PhDatMatrix mats ->
+          traverse_
+            (\(fnnm, mat) ->
+              putStrLn (fnnm ++ ": " ++ pretty_matrix mat) >> return ())
+            (M.toAscList mats)
+        PhDatSoln res ->
+          putStrLn . show $ res
     return ()
   where
     p = prefs showHelpOnError

@@ -1,6 +1,6 @@
 
 module TerminationChecking.Parser
-  -- (parse_program)
+  (Prog, parse_program)
 where
 
 import Control.Monad
