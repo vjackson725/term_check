@@ -1,5 +1,5 @@
 module TerminationChecking.Solver
-  (solve_mat)
+  (TermResult, solve_mat)
 where
 
 
@@ -31,8 +31,12 @@ such that:
 Because of the limitations of the linear programming library we're using, x, y and z are represented
 as 1 vector x ++ y ++ z, and we just work with the appropriate parts of that big vector.
 -}
-solve_mat :: [[Entry]] -> Maybe [Double]
-solve_mat = error "solve_mat not yet implemented"
+
+
+type TermResult = Bool
+
+solve_mat :: [[Entry]] -> TermResult
+solve_mat termmat = termmat == [] || termCheck termmat
 
 
 type Tmatrix = [[Entry]]

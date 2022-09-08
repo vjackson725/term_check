@@ -11,7 +11,7 @@ import qualified Data.Map as M
 import TerminationChecking.Exec
 import TerminationChecking.Lang
 import TerminationChecking.Parser (Prog, parse_program)
-import TerminationChecking.Solver (solve_mat)
+import TerminationChecking.Solver (TermResult, solve_mat)
 
 import qualified Data.Map as M
 
@@ -33,7 +33,7 @@ data PhaseData =
   PhDatProgText String |
   PhDatProgram Prog |
   PhDatMatrix (M.Map String [[Entry]]) |
-  PhDatSoln (M.Map String (Maybe [Double]))
+  PhDatSoln (M.Map String TermResult)
   deriving (Show, Eq)
 
 isPhase :: Phase -> PhaseData -> Bool
@@ -68,6 +68,7 @@ termcheck_argparser =
       (  command "makematrix" (info make_matrix_cmd (progDesc "Make a matrix from a program"))
       <> command "matrixcheck" (info matrix_check_cmd (progDesc "Check a matrix is solvable"))
       <> command "programcheck" (info program_check_cmd (progDesc "Check a program terminates"))
+      <> command "solve" (info program_check_cmd (progDesc "Check a program terminates"))
       ) <**> helper)
     (progDesc "Linear-Lexicographic program termination checker.")
 
