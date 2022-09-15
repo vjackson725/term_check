@@ -16,25 +16,25 @@ g L = 1
 
 -- Ought to have matrix [[-1, -1]]
 
-[ ( PBox (PSumR (PPair (PVar 'x') (PVar 'y'))), TBox (TSumR (TVar 'y')) ), ( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
+[ ( PRoll (PSumR (PPair (PVar 'x') (PVar 'y'))), TRoll (TSumR (TVar 'y')) ), ( PRoll (PSumL PUnit), TRoll (TSumL TUnit) )]
 
-tlet 'f' [ ( PBox 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TApp 'f' (TBox 'y' (TSumR (TVar 'y'))) ), ( PBox 'y' (PSumL PUnit), TBox 'y' (TSumL TUnit) )]
+tlet 'f' [ ( PRoll 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TApp 'f' (TRoll 'y' (TSumR (TVar 'y'))) ), ( PRoll 'y' (PSumL PUnit), TRoll 'y' (TSumL TUnit) )]
 
-[ ( PBox 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TBox 'y' (TSumR (TVar 'y')) ), ( PBox 'y' (PSumL PUnit), TBox 'y' (TSumL TUnit) )]
+[ ( PRoll 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TRoll 'y' (TSumR (TVar 'y')) ), ( PRoll 'y' (PSumL PUnit), TRoll 'y' (TSumL TUnit) )]
 
-[ ( PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TVar "z") ), ( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
+[ ( PRoll (PSumR (PPair (PVar "x") (PRoll (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TVar "z") ), ( PRoll (PSumL PUnit), TRoll (TSumL TUnit) )]
 --state = Map.fromList [("foo", VFunDef [(PVar "x", TPair (TVar "x") (TVar "x"))])]
 
-state = Map.fromList [("foo", VFunDef [ ( PBox "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TBox "y" (TSumR (TVar "y"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )])]
+state = Map.fromList [("foo", VFunDef [ ( PRoll "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TRoll "y" (TSumR (TVar "y"))) ), ( PRoll "y" (PSumL PUnit), TRoll "y" (TSumL TUnit) )])]
 
 
 state = Map.fromList [("foo", VFunDef [(PVar "x", TApp (TVar "foo") TUnit)])]
 -- Ought to give matrix [-1]
--- matrixify "foo" [("foo", VFunDef [ ( PBox "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TBox "y" (TSumR (TVar "y"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )])] == [-1]
-[ ( PBox "z" (PSumR (PPair (PVar "x") (PBox "z" (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TBox "z" (TSumR (TVar "z"))) ), ( PBox "y" (PSumL PUnit), TBox "y" (TSumL TUnit) )]
+-- matrixify "foo" [("foo", VFunDef [ ( PRoll "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TRoll "y" (TSumR (TVar "y"))) ), ( PRoll "y" (PSumL PUnit), TRoll "y" (TSumL TUnit) )])] == [-1]
+[ ( PRoll "z" (PSumR (PPair (PVar "x") (PRoll "z" (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TRoll "z" (TSumR (TVar "z"))) ), ( PRoll "y" (PSumL PUnit), TRoll "y" (TSumL TUnit) )]
 
 
-state = Map.fromList [("foo", VFunDef [ ( PBox "xs" (PSumR (PPair (PVar "x") (PVar "xs"))), TApp (TVar "foo") (TVar "xs") ), ( PBox "ys" (PSumL PUnit), TBox "ys" (TSumL TUnit) )])]
+state = Map.fromList [("foo", VFunDef [ ( PRoll "xs" (PSumR (PPair (PVar "x") (PVar "xs"))), TApp (TVar "foo") (TVar "xs") ), ( PRoll "ys" (PSumL PUnit), TRoll "ys" (TSumL TUnit) )])]
 
 {-
 Idea of function in Haskell Syntax:
@@ -76,7 +76,7 @@ i.e. we check the box difference first, and then the ordering on the disjuncts. 
 
 -}
 
-[ ( PBox (PSumR (PPair (PVar "x") (PVar "z"))), TApp (TVar "foo") (TVar "z") ), ( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
+[ ( PRoll (PSumR (PPair (PVar "x") (PVar "z"))), TApp (TVar "foo") (TVar "z") ), ( PRoll (PSumL PUnit), TRoll (TSumL TUnit) )]
 
 {-
 foo (x:y:xs) = foo xs
@@ -85,7 +85,7 @@ foo [] = []
 Ought to give matrix:
 [[-2]]
 -}
-[(PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "xs")))))),TApp (TVar "foo") (TVar "xs")),( PBox (PSumL PUnit), TBox (TSumL TUnit) )]
+[(PRoll (PSumR (PPair (PVar "x") (PRoll (PSumR (PPair (PVar "y") (PVar "xs")))))),TApp (TVar "foo") (TVar "xs")),( PRoll (PSumL PUnit), TRoll (TSumL TUnit) )]
 
 {-
 data BTree = B BTree BTree | L
@@ -110,7 +110,7 @@ but for now I'm going to get as much mileage out of the current language constru
 
 Ought to give matrix [[-1, -1]]
 -}
-[(PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "l")), (PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "r")), (PBox (PSumR PUnit), TBox (TSumR TUnit))]
+[(PRoll (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "l")), (PRoll (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "r")), (PRoll (PSumR PUnit), TRoll (TSumR TUnit))]
 
 {-
 A different comprotmise for this function is:
@@ -124,7 +124,7 @@ which ought to also give the matrix:
 [[-1, -1]]
 -}
 
-[(PBox (PSumL (PPair (PVar "l") (PVar "r"))), TBox ( TSumL ( TPair (TApp (TVar "g") (TVar "l")) (TApp (TVar "g") (TVar "r"))))), (PBox (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "r")), (PBox (PSumR PUnit), TBox (TSumR TUnit))]
+[(PRoll (PSumL (PPair (PVar "l") (PVar "r"))), TRoll ( TSumL ( TPair (TApp (TVar "g") (TVar "l")) (TApp (TVar "g") (TVar "r"))))), (PRoll (PSumL (PPair (PVar "l") (PVar "r"))), TApp (TVar "g") (TVar "r")), (PRoll (PSumR PUnit), TRoll (TSumR TUnit))]
 
 {-
 f (x:y:xs) ys = f xs (0:ys)
@@ -132,7 +132,7 @@ f xs (x:y:ys) = f (0:xs) ys
 
 Should give a matrix of [[-2, 1], [1, -2]], which should terminate
 -}
-[(PPair (PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "xs"))))))) (PVar "ys"), TApp (TVar "f") (TPair (TVar "xs") (TBox (TSumR (TPair (TNatLit 0) (TVar "ys")))))), (PPair (PVar "xs") (PBox (PSumR (PPair (PVar "x") (PBox (PSumR (PPair (PVar "y") (PVar "ys"))))))), TApp (TVar "f") (TPair (TBox (TSumR (TPair (TNatLit 0) (TVar "xs")))) (TVar "ys")))]
+[(PPair (PRoll (PSumR (PPair (PVar "x") (PRoll (PSumR (PPair (PVar "y") (PVar "xs"))))))) (PVar "ys"), TApp (TVar "f") (TPair (TVar "xs") (TRoll (TSumR (TPair (TNatLit 0) (TVar "ys")))))), (PPair (PVar "xs") (PRoll (PSumR (PPair (PVar "x") (PRoll (PSumR (PPair (PVar "y") (PVar "ys"))))))), TApp (TVar "f") (TPair (TRoll (TSumR (TPair (TNatLit 0) (TVar "xs")))) (TVar "ys")))]
 
 {-
 f (x:xs) y (z:z':zs) v w = f xs y zs (0:0:0:0:v) (0:w)
@@ -159,6 +159,6 @@ Should terminate with the matrix
 [[-1, 0], [0, 1], [0, -1]]
 -}
 
-[(PSumL (PBox (PSumR (PPair (PVar "n") (PVar "ns")))), TApp (TVar "f") (TSumR (TVar "ns"))), (PSumR (PVar "n"), TApp (TVar "f") (TSumL (TVar "n")))]
+[(PSumL (PRoll (PSumR (PPair (PVar "n") (PVar "ns")))), TApp (TVar "f") (TSumR (TVar "ns"))), (PSumR (PVar "n"), TApp (TVar "f") (TSumL (TVar "n")))]
 
 -}

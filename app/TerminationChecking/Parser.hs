@@ -36,7 +36,7 @@ lexer =
       , "Right"
       , "True"
       , "False"
-      , "Box"
+      , "Roll"
       , "if"
       , "then"
       , "else"
@@ -117,7 +117,7 @@ pattern_parser =
   <|> (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
   <|> (symbol "Left"  *> (PSumL <$> pattern_parser) <?> "pattern left sum")
   <|> (symbol "Right" *> (PSumR <$> pattern_parser) <?> "pattern right sum")
-  <|> (symbol "Box"   *> (PBox <$> pattern_parser) <?> "pattern box")
+  <|> (symbol "Roll"   *> (PRoll <$> pattern_parser) <?> "pattern box")
   <|> ((PNatLit <$> natural) <?> "pattern natural literal")
   <|> (PVar <$> identifier <?> "pattern var")
   ) <?> "pattern"
@@ -150,8 +150,8 @@ single_term_parser =
   <|> try (TBoolLit <$> (symbol "True"  *> return True) <?> "term True literal")
   <|> try (TSumL    <$> (symbol "Left"  *> term_parser) <?> "term left sum")
   <|> try (TSumR    <$> (symbol "Right" *> term_parser) <?> "term right sum")
-  <|> try (TBox     <$> (symbol "Box"   *> term_parser) <?> "term box")
-  <|> try (TUnbox   <$> (symbol "Unbox" *> term_parser) <?> "term unbox")
+  <|> try (TRoll     <$> (symbol "Roll"   *> term_parser) <?> "term box")
+  <|> try (TUnroll   <$> (symbol "Unroll" *> term_parser) <?> "term unbox")
   <|> (TNatLit <$> natural <?> "term natural literal")
   <|> (TVar    <$> identifier <?> "term var")
   <|> (TOp     <$> operator <?> "term operator")

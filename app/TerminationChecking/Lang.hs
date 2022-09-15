@@ -20,8 +20,8 @@ data Term v =
   TApp (Term v) (Term v) |
   TSumL (Term v) |
   TSumR (Term v) |
-  TBox (Term v) |
-  TUnbox (Term v)
+  TRoll (Term v) |
+  TUnroll (Term v)
   deriving (Eq, Show)
 
 tlet :: v -> (Term v) -> (Term v) -> (Term v)
@@ -35,7 +35,7 @@ data Pattern v =
   PPair (Pattern v) (Pattern v) |
   PSumL (Pattern v) |
   PSumR (Pattern v) |
-  PBox (Pattern v)
+  PRoll (Pattern v)
   deriving (Eq, Show)
 
 {-
@@ -53,7 +53,7 @@ pattern_count_vars (PNatLit n)  m = m
 pattern_count_vars (PBoolLit n) m = m
 pattern_count_vars (PSumL p) m = pattern_count_vars p m
 pattern_count_vars (PSumR p) m = pattern_count_vars p m
-pattern_count_vars (PBox p)  m = pattern_count_vars p m
+pattern_count_vars (PRoll p)  m = pattern_count_vars p m
 
 pattern_dup_vars :: (Show v, Ord v) => Pattern v -> [v]
 pattern_dup_vars p = pattern_count_vars p M.empty |> M.filter (>0) |> M.keys

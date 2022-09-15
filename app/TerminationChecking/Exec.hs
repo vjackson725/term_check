@@ -26,8 +26,8 @@ data Value v =
   VContinuation (State v) v (Term v) |
   VSumL (Value v) |
   VSumR (Value v) |
-  VBox (Value v) |
-  VUnbox (Value v)
+  VRoll (Value v) |
+  VUnroll (Value v)
   deriving (Eq, Show)
 
 
@@ -45,8 +45,8 @@ subst_term b (TLambda x s) = TLambda x (subst_term (b |> filter ((/=) x . fst)) 
 subst_term b (TApp s0 s1) = TApp (subst_term b s0) (subst_term b s1)
 subst_term b (TSumL s) = TSumL (subst_term b s)
 subst_term b (TSumR s) = TSumR (subst_term b s)
-subst_term b (TBox s) = TBox (subst_term b s)
-subst_term b (TUnbox s) = TUnbox (subst_term b s)
+subst_term b (TRoll s) = TRoll (subst_term b s)
+subst_term b (TUnroll s) = TUnroll (subst_term b s)
 
 pattern_match :: Eq v => Pattern v -> Term v -> Maybe (Binding v)
 pattern_match (PVar x) t = Just [(x,t)]
@@ -60,7 +60,7 @@ pattern_match (PNatLit n) (TNatLit m) | n == m = Just []
 pattern_match (PBoolLit n) (TBoolLit m) | n == m = Just []
 pattern_match (PSumL p) (TSumL s) = pattern_match p s
 pattern_match (PSumR p) (TSumR s) = pattern_match p s
-pattern_match (PBox p) (TBox s) = pattern_match p s
+pattern_match (PRoll p) (TRoll s) = pattern_match p s
   {-do
     b <- pattern_match p s
     if any (\(x,_) -> rp == x) b
@@ -82,7 +82,7 @@ pattern_var_depths n PNatLit{} s a b = []
 pattern_var_depths n PBoolLit{} s a b = []
 pattern_var_depths n (PSumL p) s a b = pattern_var_depths n p (Ld:s) a b
 pattern_var_depths n (PSumR p) s a b = pattern_var_depths n p (Rd:s) a b
-pattern_var_depths n (PBox p) s a b = pattern_var_depths (n+1) p s a False
+pattern_var_depths n (PRoll p) s a b = pattern_var_depths (n+1) p s a False
 
 --term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
 term_var_depths n (TVar x) s a b = [(x,(fromIntegral n) :: Double, reverse s, reverse a)]
@@ -92,8 +92,8 @@ term_var_depths n TNatLit{} s a b = []
 term_var_depths n TBoolLit{} s a b = []
 term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b
 term_var_depths n (TSumR p) s a b = term_var_depths n p (Rd:s) a b
-term_var_depths n (TBox p) s a b = term_var_depths (n+1) p s a False
-term_var_depths n (TUnbox p) s a b = term_var_depths (n-1) p s a b
+term_var_depths n (TRoll p) s a b = term_var_depths (n+1) p s a False
+term_var_depths n (TUnroll p) s a b = term_var_depths (n-1) p s a b
 term_var_depths n (TApp p r) s a b = []
 
 
@@ -105,13 +105,13 @@ term_find_rec :: Eq v => v -> Term v -> [Term v]
 term_find_rec rn (TPair s0 s1) = term_find_rec rn s0 ++ term_find_rec rn s1
 term_find_rec rn (TSumL s) = term_find_rec rn s
 term_find_rec rn (TSumR s) = term_find_rec rn s
-term_find_rec rn (TBox s) = term_find_rec rn s
+term_find_rec rn (TRoll s) = term_find_rec rn s
 term_find_rec rn (TIf sb st sf) =
   term_find_rec rn sb ++ term_find_rec rn st ++ term_find_rec rn sf
 term_find_rec rn (TLambda x s) | x /= rn = term_find_rec rn s
 term_find_rec rn (TApp (TVar x) s1) | rn == x = [s1]
 term_find_rec rn (TApp s0 s1) = term_find_rec rn s0 ++ term_find_rec rn s1
-term_find_rec rn (TUnbox s) = term_find_rec rn s
+term_find_rec rn (TUnroll s) = term_find_rec rn s
 term_find_rec _ _ = []
 
 fun_apply :: Eq v => FunDef v -> Term v -> Maybe (Term v)
@@ -142,9 +142,9 @@ eval st (TApp (TVar xfn) t) =
         Just t' -> eval st t'
         Nothing -> VUndefined
     Nothing -> VUndefined
-eval st (TBox e) = VBox (eval st e)
-eval st (TUnbox (TBox e)) = eval st e
-eval st (TUnbox e) = VUnbox (eval st e) 
+eval st (TRoll e) = VRoll (eval st e)
+eval st (TUnroll (TRoll e)) = eval st e
+eval st (TUnroll e) = VUnroll (eval st e) 
 eval st (TSumL e) = VSumL (eval st e)
 eval st (TSumR e) = VSumR (eval st e)
 eval st (TApp _ _) = VUndefined
