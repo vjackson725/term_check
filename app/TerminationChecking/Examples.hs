@@ -161,4 +161,7 @@ Should terminate with the matrix
 
 [(PSumL (PRoll (PSumR (PPair (PVar "n") (PVar "ns")))), TApp (TVar "f") (TSumR (TVar "ns"))), (PSumR (PVar "n"), TApp (TVar "f") (TSumL (TVar "n")))]
 
+
+
+[PVar "x", TApp (TVar x) (TVar x)]
 -}
