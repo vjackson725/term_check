@@ -23,7 +23,7 @@ tlet 'f' [ ( PRoll 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TApp 'f' (TRoll 'y
 [ ( PRoll 'y' (PSumR (PPair (PVar 'x') (PVar 'y'))), TRoll 'y' (TSumR (TVar 'y')) ), ( PRoll 'y' (PSumL PUnit), TRoll 'y' (TSumL TUnit) )]
 
 [ ( PRoll (PSumR (PPair (PVar "x") (PRoll (PSumR (PPair (PVar "y") (PVar "z")))))), TApp (TVar "foo") (TVar "z") ), ( PRoll (PSumL PUnit), TRoll (TSumL TUnit) )]
---state = Map.fromList [("foo", VFunDef [(PVar "x", TPair (TVar "x") (TVar "x"))])]
+--state = M.fromList [("foo", VFunDef [(PVar "x", TPair (TVar "x") (TVar "x"))])]
 
 state = Map.fromList [("foo", VFunDef [ ( PRoll "y" (PSumR (PPair (PVar "x") (PVar "y"))), TApp (TVar "foo") (TRoll "y" (TSumR (TVar "y"))) ), ( PRoll "y" (PSumL PUnit), TRoll "y" (TSumL TUnit) )])]
 

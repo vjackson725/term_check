@@ -94,8 +94,8 @@ term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b
 term_var_depths n (TSumR p) s a b = term_var_depths n p (Rd:s) a b
 term_var_depths n (TRoll p) s a b = term_var_depths (n+1) p s a False
 term_var_depths n (TUnroll p) s a b = term_var_depths (n-1) p s a b
-term_var_depths n (TApp p r) s a b = []
-
+term_var_depths n (TApp p r) s a b = [] -- THIS NEEDS FIXING
+-- ADD IN AN IF
 
 app_primary_term :: Term v -> Term v
 app_primary_term (TApp s _) = app_primary_term s
@@ -164,7 +164,11 @@ data Entry = Num Double | Sym Val deriving (Eq, Show)
 matrixify :: Ord v => v -> FunDef v -> [[Entry]]
 matrixify name fun = matrixified
     where
-
+        
+        {-
+        Takes in a function definition and turns it into a list of pairs of depths of variables in
+        the pattern and depths of variables in the term in each recursive call
+        -}
         m = map
             (\(p, s) ->
               ( pattern_var_depths 0 p [] [] True
@@ -172,21 +176,55 @@ matrixify name fun = matrixified
               )
             ) fun
 
+        -- [] in the term_depth corresponds to having a constant in there
+        -- so we filter out by it so as to not consider things like f(x) = f(3) etc.
+        -- Currently not working quite as intended as function calls are assigned [] depth
+        -- as a placeholder, meaning we assume all auxilliary functions terminate (the intention
+        -- was to make the opposite assumption for now)
         filtM = filter (\x -> snd x /= []) m
 
+
+        {-
+        m' is a further filtration of filtM which removes non-max depth variables and collectes
+        max-depth variables into a single set such that there is only one max-depth variable for
+        each argument.
+
+        For example, if we consider a type data BTree = Leaf | BNode Integer BTree BTree
+        we might have f (BNode n t1 t2, BNode n' t1' t2') = f (t1, t2) + f(BNode n' t1 t1', t2'). Here,
+        we would want to convert this to:
+        [({n, t1, t2}, t1), ({n', t1', t2'}, t2), ({n, t1, t2}, {n', t1, t1'}), ({n', t1', t2'}, t2')]
+
+        -}
         m' = map (\(xs, ys) -> (list_convert xs, list_convert ys)) filtM
 
+        {- 
+        This turns our pairs of depths and arguments etc. into something resembling our final matrix; a matrix of
+        pre-matrix entries. These are just like regular matrix entries, but they keep track explicitly of which
+        argument and disjunct each entry is coming from. This is because our matrix will not be sorted yet. This is
+        more or less just a way of rephrasing the information stored in the pairs, but we've now explicitly calculated
+        which entry will go in that arg-disj spot.
+        
+        -}
         mat = map recCall m' --is our temp matrix, then we do some processing on this
         --etc for other kinds of args
 
+        {-
+        We now add in columns to our matrix to take account of different disjuncts.
+        -}
+        disjs = Set.toList $ snd (argsAndDisjs mat)
+        matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
+
+        -- This just givs a set of all the different aguments and disjuncts in our function
         ads = argsAndDisjs matWithDisjArgs
         arguments = Set.toList $ fst ads
 
-        disjs = Set.toList $ snd (argsAndDisjs mat)
-
+        {-
+        Now that all of the disjuncts are codefied with arguments, we just have to sort all of
+            the entries by their argument by placing them in a unique column associated with their
+            argument (of course, the row is already taken care of)
+        -}
         matrixified = map (\a -> sortByArg a matWithDisjArgs) arguments
 
-        matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
 
 
 argsAndDisjs matr = let r    = map (getArgsAndDisjs Set.empty Set.empty) matr
@@ -241,6 +279,11 @@ makeDisjArgsAllDisjs ds call = call ++ (map (makeDisjArgs call) ds)
 
 makeDisjArgs call d = makeDisjArgs' 0 d call
 
+
+{-
+Idea is if the argument is decreasing we don't need to care about the disjunct, so we only put non-trivial
+entries in the disjunct columns if there's an entry which increases
+-}
 makeDisjArgs' ret d [] = N ret d
 makeDisjArgs' ret d ((P n f t p):rs) | f == t = makeDisjArgs' ret d rs
                                      | f == d = makeDisjArgs' (ret - 1) d rs
