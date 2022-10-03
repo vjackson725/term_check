@@ -11,7 +11,7 @@ import qualified Data.Map as M
 import TerminationChecking.Exec
 import TerminationChecking.Lang
 import TerminationChecking.Parser (Prog, parse_program)
-import TerminationChecking.Solver (TermResult, solve_mat)
+import TerminationChecking.Solver --(TermResult, solve_mat)
 
 import qualified Data.Map as M
 
