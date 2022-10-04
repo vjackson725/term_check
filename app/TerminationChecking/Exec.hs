@@ -85,16 +85,18 @@ pattern_var_depths n (PSumR p) s a b = pattern_var_depths n p (Rd:s) a b
 pattern_var_depths n (PRoll p) s a b = pattern_var_depths (n+1) p s a False
 
 --term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
-term_var_depths n (TVar x) s a b = [(x,(fromIntegral n) :: Double, reverse s, reverse a)]
+--(fmap fromIntegral n) :: Maybe Double
+term_var_depths :: Eq v => Maybe Int -> Term v -> Path -> Path -> Bool -> [(v, Maybe Double, Path, Path)]
+term_var_depths n (TVar x) s a b = [(x, (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n TUnit s a b = []
 term_var_depths n (TPair p0 p1) s a b = if b then term_var_depths n p0 s (La:a) b ++ term_var_depths n p1 s (Ra:a) b else term_var_depths n p0 s a b ++ term_var_depths n p1 s a b
 term_var_depths n TNatLit{} s a b = []
 term_var_depths n TBoolLit{} s a b = []
 term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b
 term_var_depths n (TSumR p) s a b = term_var_depths n p (Rd:s) a b
-term_var_depths n (TRoll p) s a b = term_var_depths (n+1) p s a False
-term_var_depths n (TUnroll p) s a b = term_var_depths (n-1) p s a b
-term_var_depths n (TApp p r) s a b = [] -- THIS NEEDS FIXING
+term_var_depths n (TRoll p) s a b = term_var_depths ((+) <$> n <*> (Just 1)) p s a False
+term_var_depths n (TUnroll p) s a b = term_var_depths ((-) <$> n <*> (Just 1)) p s a b
+term_var_depths n (TApp p r) s a b = term_var_depths n p s a b ++ term_var_depths Nothing r s a b-- THIS NEEDS FIXING
 -- ADD IN AN IF
 
 app_primary_term :: Term v -> Term v
@@ -177,8 +179,8 @@ matrixify name fun = matrixified
             ) fun-}
         m = join $ map
                 (\(p, s) -> go $
-                  ( pattern_var_depths 0 p [] [] True
-                  , map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s)
+                  ( map (\(a, b, c, d) -> (a, Just b, c, d)) (pattern_var_depths 0 p [] [] True)
+                  , map (\x -> term_var_depths (Just 0) x [] [] True) (term_find_rec name s)
                   )
                 ) fun where
                     go (x, []) = []
@@ -257,9 +259,12 @@ gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -
 -- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
 --depth_compare :: Ord v => ((Set v,Double,Path, Path), [(Set v,Double,Path, Path)]) -> PreMatrixEntry
 depth_compare ((_, _, _, a), []) = N 0 a
-depth_compare ((v, n, from, argFrom), ((v', n', to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n > n') = N (n' - n) argFrom
-                                                                | (argFrom == argTo) && (v' `Set.isSubsetOf` v)             = P (n' - n) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
-                                                                | otherwise              = depth_compare ((v, n, from, argFrom), xs)
+depth_compare ((v, (Just n), from, argFrom), ((v', (Just n'), to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n > n') = N (n' - n) argFrom
+                                                                              | (argFrom == argTo) && (v' `Set.isSubsetOf` v)             = P (n' - n) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
+                                                                              | otherwise              = depth_compare ((v, (Just n), from, argFrom), xs)
+depth_compare ((v, n, from, argFrom), ((v', Nothing, to, argTo):xs)) = S Na argFrom 
+depth_compare ((v, Nothing, from, argFrom), ((v', n, to, argTo):xs)) = S Na argFrom 
+
 pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c])
 pair_map f [] ys = []
 pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
@@ -325,17 +330,21 @@ list_convert xs = mkUniq $ map (\y -> process_depths (setify y) xs) xs --mkUniq 
 
 -- Gets max depth variables and puts them all in a set so we only have 1 entry per arg
 process_depths ret [] = ret
-process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs)    | (arg == arg') && (n' > n)  = process_depths ((Set.singleton v'), n', disj', arg') xs
-                                                                | (arg == arg') && (n' == n) = process_depths ((Set.insert v' vs), n, disj, arg) xs
-                                                                | otherwise                  = process_depths (vs, n, disj, arg) xs
+process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs)    | (arg == arg') && (n' >>> n)  = process_depths ((Set.singleton v'), n', disj', arg') xs
+                                                                | (arg == arg') && (n' == n)   = process_depths ((Set.insert v' vs), n, disj, arg) xs
+                                                                | otherwise                    = process_depths (vs, n, disj, arg) xs 
+                                                                    
 
 
 
+Nothing >>> a = True
+a >>> Nothing = False
+a >>> b = a > b
 
 mat' name fun = join $ map
                 (\(p, s) -> go $
-                  ( pattern_var_depths 0 p [] [] True
-                  , map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s)
+                  ( map (\(a, b, c, d) -> (a, Just b, c, d)) (pattern_var_depths 0 p [] [] True)
+                  , map (\x -> term_var_depths (Just 0) x [] [] True) (term_find_rec name s)
                   )
                 ) fun where
                     go (x, []) = []
