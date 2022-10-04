@@ -109,7 +109,7 @@ term_find_rec rn (TRoll s) = term_find_rec rn s
 term_find_rec rn (TIf sb st sf) =
   term_find_rec rn sb ++ term_find_rec rn st ++ term_find_rec rn sf
 term_find_rec rn (TLambda x s) | x /= rn = term_find_rec rn s
-term_find_rec rn (TApp (TVar x) s1) | rn == x = [s1]
+term_find_rec rn (TApp (TVar x) s1) | rn == x = s1 : term_find_rec rn s1
 term_find_rec rn (TApp s0 s1) = term_find_rec rn s0 ++ term_find_rec rn s1
 term_find_rec rn (TUnroll s) = term_find_rec rn s
 term_find_rec _ _ = []
