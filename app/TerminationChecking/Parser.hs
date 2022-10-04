@@ -116,7 +116,7 @@ pattern_parser =
   <|> (symbol "True"  *> return (PBoolLit True)  <?> "pattern True literal")
   <|> (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
   <|> (symbol "Left"  *> (PSumL <$> pattern_parser) <?> "pattern left sum")
-  <|> (symbol "Right" *> (PSumR <$> pattern_parser) <?> "pattern right sum")
+  <|> (try (symbol "Right" *> (PSumR <$> pattern_parser) <?> "pattern right sum"))
   <|> (symbol "Roll"   *> (PRoll <$> pattern_parser) <?> "pattern box")
   <|> ((PNatLit <$> natural) <?> "pattern natural literal")
   <|> (PVar <$> identifier <?> "pattern var")

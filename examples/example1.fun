@@ -1,4 +1,4 @@
-f (Box (Left ())) = ()
-f (Box (Right n)) = f n
+f (Roll (Left ())) = ()
+f (Roll (Right n)) = f n
 
 g () = ()
