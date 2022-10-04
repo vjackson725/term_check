@@ -107,12 +107,12 @@ fnname_parser = identifier <?> "fnname"
 
 pattern_parser :: Monad m => ParsecT String u m (Pattern String)
 pattern_parser =
-  ((symbol "(" *>
-    ((symbol ")" *> return PUnit <?> "pattern unit")
-      <|> (do
-            p0 <- pattern_parser
-            ((symbol ")" *> return p0 <?> "pattern parenthesis")
-              <|> foldr1 PPair <$> ((:) <$> return p0 <*> sepBy1 pattern_parser comma) <?> "pattern tuple"))))
+  (  try (symbol "()" *> return PUnit <?> "pattern unit")
+  <|> (do
+        _ <- symbol "("
+        ts <- sepBy1 pattern_parser comma
+        _ <- symbol ")"
+        return $ foldr1 PPair ts)
   <|> (symbol "True"  *> return (PBoolLit True)  <?> "pattern True literal")
   <|> (symbol "False" *> return (PBoolLit False) <?> "pattern False literal")
   <|> (symbol "Left"  *> (PSumL <$> pattern_parser) <?> "pattern left sum")
@@ -138,10 +138,7 @@ single_term_parser =
         _ <- symbol "("
         ts <- sepBy1 term_parser comma
         _ <- symbol ")"
-        return
-          (case ts of
-            t:[] -> t -- parens
-            _:_ -> foldr1 TPair ts)) -- tuple
+        return $ foldr1 TPair ts)
   <|> ((TIf <$>
         try (symbol "if"   *> term_parser) <*>
         try (symbol "then" *> term_parser) <*>
@@ -150,8 +147,8 @@ single_term_parser =
   <|> try (TBoolLit <$> (symbol "True"  *> return True) <?> "term True literal")
   <|> try (TSumL    <$> (symbol "Left"  *> term_parser) <?> "term left sum")
   <|> try (TSumR    <$> (symbol "Right" *> term_parser) <?> "term right sum")
-  <|> try (TRoll     <$> (symbol "Roll"   *> term_parser) <?> "term box")
-  <|> try (TUnroll   <$> (symbol "Unroll" *> term_parser) <?> "term unbox")
+  <|> try (TRoll    <$> (symbol "Roll"   *> term_parser) <?> "term roll")
+  <|> try (TUnroll  <$> (symbol "Unroll" *> term_parser) <?> "term unroll")
   <|> (TNatLit <$> natural <?> "term natural literal")
   <|> (TVar    <$> identifier <?> "term var")
   <|> (TOp     <$> operator <?> "term operator")
