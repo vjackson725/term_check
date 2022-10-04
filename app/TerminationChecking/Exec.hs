@@ -75,23 +75,25 @@ type Path = [PathToken]
 
 fst' (a, b, c) = a
 --pattern_var_depths :: Eq v => Int -> Pattern v -> Path -> [(v,Int,Path)]
-pattern_var_depths n (PVar x) s a b = [(x,(fromIntegral n) :: Double, reverse s, reverse a)]
-pattern_var_depths n PUnit s a b = []
+pattern_var_depths n (PVar x) s a b = [(Var x,(fromIntegral n) :: Double, reverse s, reverse a)]
+pattern_var_depths n PUnit s a b = [(Unit (), (fromIntegral n), reverse s, reverse a)]
 pattern_var_depths n (PPair p0 p1) s a b = if b then pattern_var_depths n p0 s (La:a) b ++ pattern_var_depths n p1 s (Ra:a) b else pattern_var_depths n p0 s a b ++ pattern_var_depths n p1 s a b
-pattern_var_depths n PNatLit{} s a b = []
-pattern_var_depths n PBoolLit{} s a b = []
+pattern_var_depths n (PNatLit num) s a b = [(NatLit num, (fromIntegral n), reverse s, reverse a)]
+pattern_var_depths n (PBoolLit bool) s a b = [(BoolLit bool, (fromIntegral n), reverse s, reverse a)]
 pattern_var_depths n (PSumL p) s a b = pattern_var_depths n p (Ld:s) a b
 pattern_var_depths n (PSumR p) s a b = pattern_var_depths n p (Rd:s) a b
 pattern_var_depths n (PRoll p) s a b = pattern_var_depths (n+1) p s a False
 
+
+data SizeChange v = Var v | NatLit Integer | BoolLit Bool | Unit () deriving (Show, Eq, Ord)
 --term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
 --(fmap fromIntegral n) :: Maybe Double
-term_var_depths :: Eq v => Maybe Int -> Term v -> Path -> Path -> Bool -> [(v, Maybe Double, Path, Path)]
-term_var_depths n (TVar x) s a b = [(x, (fmap fromIntegral n), reverse s, reverse a)]
-term_var_depths n TUnit s a b = []
+term_var_depths :: Eq v => Maybe Int -> Term v -> Path -> Path -> Bool -> [(SizeChange v, Maybe Double, Path, Path)]
+term_var_depths n (TVar x) s a b = [(Var x, (fmap fromIntegral n), reverse s, reverse a)]
+term_var_depths n TUnit s a b = [(Unit (), (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n (TPair p0 p1) s a b = if b then term_var_depths n p0 s (La:a) b ++ term_var_depths n p1 s (Ra:a) b else term_var_depths n p0 s a b ++ term_var_depths n p1 s a b
-term_var_depths n TNatLit{} s a b = []
-term_var_depths n TBoolLit{} s a b = []
+term_var_depths n (TNatLit num) s a b = [(NatLit num, (fmap fromIntegral n), reverse s, reverse a)]
+term_var_depths n (TBoolLit bool) s a b = [(BoolLit bool, (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b
 term_var_depths n (TSumR p) s a b = term_var_depths n p (Rd:s) a b
 term_var_depths n (TRoll p) s a b = term_var_depths ((+) <$> n <*> (Just 1)) p s a False
