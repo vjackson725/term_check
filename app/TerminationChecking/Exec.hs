@@ -96,7 +96,7 @@ term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b
 term_var_depths n (TSumR p) s a b = term_var_depths n p (Rd:s) a b
 term_var_depths n (TRoll p) s a b = term_var_depths ((+) <$> n <*> (Just 1)) p s a False
 term_var_depths n (TUnroll p) s a b = term_var_depths ((-) <$> n <*> (Just 1)) p s a b
-term_var_depths n (TApp p r) s a b = term_var_depths n p s a b ++ term_var_depths Nothing r s a b-- THIS NEEDS FIXING
+term_var_depths n (TApp p r) s a b = term_var_depths n p s a False ++ term_var_depths Nothing r s a False-- THIS NEEDS FIXING
 -- ADD IN AN IF
 
 app_primary_term :: Term v -> Term v
