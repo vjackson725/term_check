@@ -169,13 +169,20 @@ matrixify name fun = matrixified
         Takes in a function definition and turns it into a list of pairs of depths of variables in
         the pattern and depths of variables in the term in each recursive call
         -}
-        m = map
+        {-m = map
             (\(p, s) ->
               ( pattern_var_depths 0 p [] [] True
               , join (map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s))
               )
-            ) fun
-
+            ) fun-}
+        m = join $ map
+                (\(p, s) -> go $
+                  ( pattern_var_depths 0 p [] [] True
+                  , map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s)
+                  )
+                ) fun where
+                    go (x, []) = []
+                    go (x, (y:ys)) = (x, y) : (go (x, ys))
         -- [] in the term_depth corresponds to having a constant in there
         -- so we filter out by it so as to not consider things like f(x) = f(3) etc.
         -- Currently not working quite as intended as function calls are assigned [] depth
@@ -323,10 +330,14 @@ process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs)    | (arg == arg') 
                                                                 | otherwise                  = process_depths (vs, n, disj, arg) xs
 
 
-mat' name fun = map
-                (\(p, s) ->
+
+
+mat' name fun = join $ map
+                (\(p, s) -> go $
                   ( pattern_var_depths 0 p [] [] True
-                  , join (map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s))
+                  , map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s)
                   )
-                ) fun
+                ) fun where
+                    go (x, []) = []
+                    go (x, (y:ys)) = (x, y) : (go (x, ys))
 
