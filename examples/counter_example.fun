@@ -1,0 +1,2 @@
+f (Left n, Right (Left (Roll (Right ((), m))))) = f (Left (Roll (Right ((), n))), Right (Right (Left m)))
+f (Left (Roll (Right ((), n))), Right (Right (Right m))) = f (Left n, Right (Right (Right (Roll (Right ((), m))))))

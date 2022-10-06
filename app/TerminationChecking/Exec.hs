@@ -88,14 +88,14 @@ pattern_var_depths n (PRoll p) s a b = pattern_var_depths (n+1) p s a False
 data SizeChange v = Var v | NatLit Integer | BoolLit Bool | Unit () deriving (Show, Eq, Ord)
 --term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
 --(fmap fromIntegral n) :: Maybe Double
-term_var_depths :: Eq v => Maybe Int -> Term v -> Path -> Path -> Bool -> [(SizeChange v, Maybe Double, Path, Path)]
+term_var_depths :: Maybe Int -> Term v -> Path -> Path -> Bool -> [(SizeChange v, Maybe Double, Path, Path)]
 term_var_depths n (TVar x) s a b = [(Var x, (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n TUnit s a b = [(Unit (), (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n (TPair p0 p1) s a b = if b then term_var_depths n p0 s (La:a) b ++ term_var_depths n p1 s (Ra:a) b else term_var_depths n p0 s a b ++ term_var_depths n p1 s a b
 term_var_depths n (TNatLit num) s a b = [(NatLit num, (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n (TBoolLit bool) s a b = [(BoolLit bool, (fmap fromIntegral n), reverse s, reverse a)]
-term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b
-term_var_depths n (TSumR p) s a b = term_var_depths n p (Rd:s) a b
+term_var_depths n (TSumL p) s a b = if b then term_var_depths n p (Ld:s) a b else term_var_depths n p s a b
+term_var_depths n (TSumR p) s a b = if b then term_var_depths n p (Rd:s) a b else term_var_depths n p s a b
 term_var_depths n (TRoll p) s a b = term_var_depths ((+) <$> n <*> (Just 1)) p s a False
 term_var_depths n (TUnroll p) s a b = term_var_depths ((-) <$> n <*> (Just 1)) p s a b
 term_var_depths n (TApp p r) s a b = term_var_depths n p s a False ++ term_var_depths Nothing r s a False-- THIS NEEDS FIXING
@@ -206,6 +206,8 @@ matrixify name fun = matrixified
         [({n, t1, t2}, t1), ({n', t1', t2'}, t2), ({n, t1, t2}, {n', t1, t1'}), ({n', t1', t2'}, t2')]
 
         -}
+        isVar (Var x) = True
+        isVar _ = False
         m' = map (\(xs, ys) -> (list_convert xs, list_convert ys)) filtM
 
         {- 
@@ -260,9 +262,11 @@ gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -
 
 -- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
 --depth_compare :: Ord v => ((Set v,Double,Path, Path), [(Set v,Double,Path, Path)]) -> PreMatrixEntry
+-- (v' `Set.isSubsetOf` v)
+
+-- | (argFrom == argTo) && (Set.size (v' `Set.intersection` v) /= 0) && (n > n') = N (n' - n) argFrom
 depth_compare ((_, _, _, a), []) = N 0 a
-depth_compare ((v, (Just n), from, argFrom), ((v', (Just n'), to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n > n') = N (n' - n) argFrom
-                                                                              | (argFrom == argTo) && (v' `Set.isSubsetOf` v)             = P (n' - n) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
+depth_compare ((v, (Just n), from, argFrom), ((v', (Just n'), to, argTo):xs)) | (argFrom == argTo) && (Set.size (v' `Set.intersection` v) /= 0)             = P (n' - n) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
                                                                               | otherwise              = depth_compare ((v, (Just n), from, argFrom), xs)
 depth_compare ((v, n, from, argFrom), ((v', Nothing, to, argTo):xs)) = S Na argFrom 
 depth_compare ((v, Nothing, from, argFrom), ((v', n, to, argTo):xs)) = S Na argFrom 
