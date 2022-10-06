@@ -73,25 +73,28 @@ data PathToken = La | Ra | Ld | Rd deriving (Eq, Show, Ord)
 
 type Path = [PathToken]
 
-fst' (a, b, c) = a
---pattern_var_depths :: Eq v => Int -> Pattern v -> Path -> [(v,Int,Path)]
-pattern_var_depths n (PVar x) s a b = [(Var x,(fromIntegral n) :: Double, reverse s, reverse a)]
+data SizeChange v = Var v | NatLit Integer | BoolLit Bool | Unit () deriving (Show, Eq, Ord)
+
+pattern_var_depths :: Eq v => Int -> Pattern v -> Path -> Path -> Bool -> [(SizeChange v, Double, Path, Path)]
+pattern_var_depths n (PVar x) s a b = [(Var x, (fromIntegral n) :: Double, reverse s, reverse a)]
 pattern_var_depths n PUnit s a b = [(Unit (), (fromIntegral n), reverse s, reverse a)]
-pattern_var_depths n (PPair p0 p1) s a b = if b then pattern_var_depths n p0 s (La:a) b ++ pattern_var_depths n p1 s (Ra:a) b else pattern_var_depths n p0 s a b ++ pattern_var_depths n p1 s a b
+pattern_var_depths n (PPair p0 p1) s a b =
+  if b
+    then pattern_var_depths n p0 s (La:a) b ++ pattern_var_depths n p1 s (Ra:a) b
+    else pattern_var_depths n p0 s a b ++ pattern_var_depths n p1 s a b
 pattern_var_depths n (PNatLit num) s a b = [(NatLit num, (fromIntegral n), reverse s, reverse a)]
 pattern_var_depths n (PBoolLit bool) s a b = [(BoolLit bool, (fromIntegral n), reverse s, reverse a)]
 pattern_var_depths n (PSumL p) s a b = pattern_var_depths n p (Ld:s) a b
 pattern_var_depths n (PSumR p) s a b = pattern_var_depths n p (Rd:s) a b
 pattern_var_depths n (PRoll p) s a b = pattern_var_depths (n+1) p s a False
 
-
-data SizeChange v = Var v | NatLit Integer | BoolLit Bool | Unit () deriving (Show, Eq, Ord)
---term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
---(fmap fromIntegral n) :: Maybe Double
 term_var_depths :: Eq v => Maybe Int -> Term v -> Path -> Path -> Bool -> [(SizeChange v, Maybe Double, Path, Path)]
 term_var_depths n (TVar x) s a b = [(Var x, (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n TUnit s a b = [(Unit (), (fmap fromIntegral n), reverse s, reverse a)]
-term_var_depths n (TPair p0 p1) s a b = if b then term_var_depths n p0 s (La:a) b ++ term_var_depths n p1 s (Ra:a) b else term_var_depths n p0 s a b ++ term_var_depths n p1 s a b
+term_var_depths n (TPair p0 p1) s a b =
+  if b
+    then term_var_depths n p0 s (La:a) b ++ term_var_depths n p1 s (Ra:a) b
+    else term_var_depths n p0 s a b ++ term_var_depths n p1 s a b
 term_var_depths n (TNatLit num) s a b = [(NatLit num, (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n (TBoolLit bool) s a b = [(BoolLit bool, (fmap fromIntegral n), reverse s, reverse a)]
 term_var_depths n (TSumL p) s a b = term_var_depths n p (Ld:s) a b
@@ -148,7 +151,7 @@ eval st (TApp (TVar xfn) t) =
     Nothing -> VUndefined
 eval st (TRoll e) = VRoll (eval st e)
 eval st (TUnroll (TRoll e)) = eval st e
-eval st (TUnroll e) = VUnroll (eval st e) 
+eval st (TUnroll e) = VUnroll (eval st e)
 eval st (TSumL e) = VSumL (eval st e)
 eval st (TSumR e) = VSumR (eval st e)
 eval st (TApp _ _) = VUndefined
@@ -168,7 +171,7 @@ data Entry = Num Double | Sym Val deriving (Eq, Show)
 matrixify :: Ord v => v -> FunDef v -> [[Entry]]
 matrixify name fun = matrixified
     where
-        
+
         {-
         Takes in a function definition and turns it into a list of pairs of depths of variables in
         the pattern and depths of variables in the term in each recursive call
@@ -208,13 +211,13 @@ matrixify name fun = matrixified
         -}
         m' = map (\(xs, ys) -> (list_convert xs, list_convert ys)) filtM
 
-        {- 
+        {-
         This turns our pairs of depths and arguments etc. into something resembling our final matrix; a matrix of
         pre-matrix entries. These are just like regular matrix entries, but they keep track explicitly of which
         argument and disjunct each entry is coming from. This is because our matrix will not be sorted yet. This is
         more or less just a way of rephrasing the information stored in the pairs, but we've now explicitly calculated
         which entry will go in that arg-disj spot.
-        
+
         -}
         mat = map recCall m' --is our temp matrix, then we do some processing on this
         --etc for other kinds of args
@@ -264,8 +267,8 @@ depth_compare ((_, _, _, a), []) = N 0 a
 depth_compare ((v, (Just n), from, argFrom), ((v', (Just n'), to, argTo):xs)) | (argFrom == argTo) && (v' `Set.isSubsetOf` v) && (n > n') = N (n' - n) argFrom
                                                                               | (argFrom == argTo) && (v' `Set.isSubsetOf` v)             = P (n' - n) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
                                                                               | otherwise              = depth_compare ((v, (Just n), from, argFrom), xs)
-depth_compare ((v, n, from, argFrom), ((v', Nothing, to, argTo):xs)) = S Na argFrom 
-depth_compare ((v, Nothing, from, argFrom), ((v', n, to, argTo):xs)) = S Na argFrom 
+depth_compare ((v, n, from, argFrom), ((v', Nothing, to, argTo):xs)) = S Na argFrom
+depth_compare ((v, Nothing, from, argFrom), ((v', n, to, argTo):xs)) = S Na argFrom
 
 pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c])
 pair_map f [] ys = []
@@ -334,8 +337,8 @@ list_convert xs = mkUniq $ map (\y -> process_depths (setify y) xs) xs --mkUniq 
 process_depths ret [] = ret
 process_depths (vs, n, disj, arg) ((v', n', disj', arg'):xs)    | (arg == arg') && (n' >>> n)  = process_depths ((Set.singleton v'), n', disj', arg') xs
                                                                 | (arg == arg') && (n' == n)   = process_depths ((Set.insert v' vs), n, disj, arg) xs
-                                                                | otherwise                    = process_depths (vs, n, disj, arg) xs 
-                                                                    
+                                                                | otherwise                    = process_depths (vs, n, disj, arg) xs
+
 
 
 
