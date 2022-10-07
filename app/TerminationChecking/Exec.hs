@@ -84,12 +84,11 @@ pattern_var_depths n (PPair p0 p1) s a b =
     else pattern_var_depths n p0 s a b ++ pattern_var_depths n p1 s a b
 pattern_var_depths n (PNatLit num) s a b = [(NatLit num, (fromIntegral n), reverse s, reverse a)]
 pattern_var_depths n (PBoolLit bool) s a b = [(BoolLit bool, (fromIntegral n), reverse s, reverse a)]
-pattern_var_depths n (PSumL p) s a b = pattern_var_depths n p (Ld:s) a b
-pattern_var_depths n (PSumR p) s a b = pattern_var_depths n p (Rd:s) a b
+pattern_var_depths n (PSumL p) s a b = if b then pattern_var_depths n p (Ld:s) a b else pattern_var_depths n p s a b
+pattern_var_depths n (PSumR p) s a b = if b then pattern_var_depths n p (Rd:s) a b else pattern_var_depths n p s a b
 pattern_var_depths n (PRoll p) s a b = pattern_var_depths (n+1) p s a False
 
 
-data SizeChange v = Var v | NatLit Integer | BoolLit Bool | Unit () deriving (Show, Eq, Ord)
 --term_var_depths :: Eq v => Int -> Term v -> Path -> [(v,Int,Path)]
 --(fmap fromIntegral n) :: Maybe Double
 term_var_depths :: Maybe Int -> Term v -> Path -> Path -> Bool -> [(SizeChange v, Maybe Double, Path, Path)]
@@ -169,7 +168,9 @@ instance Show Val where
     show Le  = "<"
 -- Final Path is the argument in all disjuncts,
 -- P takes disjunct path from, disjunct path to and argument
-data PreMatrixEntry = S Val Path | N Double Path | P Double Path Path Path deriving (Eq, Show)
+--data PreMatrixEntry = S Val Path | N Double Path | P Double Path Path Path deriving (Eq, Show)
+
+data PreMatrixEntry = P (Either Double Val) Path Path Path deriving (Eq, Show)
 data Entry = Num Double | Sym Val deriving (Eq, Show)
 
 matrixify :: Ord v => v -> FunDef v -> [[Entry]]
@@ -265,18 +266,18 @@ mkUniq = rdHelper []
                                 | otherwise = rdHelper (seen ++ [x]) xs
 
 -- Checks if any arguments appear on the rhs that aren't on the lhs and puts a ? in that matrix entry
-gain_check xs ys = [S Na arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -> a == arg) xs) == []]
+gain_check xs ys = [P (Right Na) from [] arg | (v, n, from, arg) <- ys, (filter (\(_, _, _, a) -> a == arg) xs) == []]
 
 -- Takes in a lhs, finds its corresponding argument on the rhs and compares the depths, producing a prematrix entry
 --depth_compare :: Ord v => ((Set v,Double,Path, Path), [(Set v,Double,Path, Path)]) -> PreMatrixEntry
 -- (v' `Set.isSubsetOf` v)
 
 -- | (argFrom == argTo) && (Set.size (v' `Set.intersection` v) /= 0) && (n > n') = N (n' - n) argFrom
-depth_compare ((_, _, _, a), []) = N 0 a
-depth_compare ((v, (Just n), from, argFrom), ((v', (Just n'), to, argTo):xs)) | (argFrom == argTo) && (Set.size (v' `Set.intersection` v) /= 0)             = P (n' - n) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
+depth_compare ((_, _, from, a), []) = P (Left 0) from [] a
+depth_compare ((v, (Just n), from, argFrom), ((v', (Just n'), to, argTo):xs)) | (argFrom == argTo) && (Set.size (v' `Set.intersection` v) /= 0)             = P (Left (n' - n)) from to argFrom--if same_path from to then N 0 argFrom else P from to argFrom
                                                                               | otherwise              = depth_compare ((v, (Just n), from, argFrom), xs)
-depth_compare ((v, n, from, argFrom), ((v', Nothing, to, argTo):xs)) = S Na argFrom
-depth_compare ((v, Nothing, from, argFrom), ((v', n, to, argTo):xs)) = S Na argFrom
+depth_compare ((v, n, from, argFrom), ((v', Nothing, to, argTo):xs)) = P (Right Na) from to argFrom
+depth_compare ((v, Nothing, from, argFrom), ((v', n, to, argTo):xs)) = P (Right Na) from to argFrom
 
 pair_map :: (a -> b -> c) -> ([a] -> [b] -> [c])
 pair_map f [] ys = []
@@ -287,12 +288,13 @@ pair_map f (x:xs) ys = (map (f x) ys) ++ (pair_map f xs ys)
 
 --Gets the argument of a particular preMatrixEntry by just extracting the argument component
 argOf (P n f t p) = p
-argOf (S v p)     = p
-argOf (N n p)     = p
+--argOf (S v p)     = p
+--argOf (N n p)     = p
 
-toEntry (P n f t p) = Num n
-toEntry (S v p)     = Sym v
-toEntry (N n p)     = Num n
+toEntry (P (Left n) f t p) = Num n
+toEntry (P (Right v) f t p) = Sym v
+--toEntry (S v p)     = Sym v
+--toEntry (N n p)     = Num n
 
 -- Extracts all of the pre-matrix entries in a particular argument for all the recursive calls.
 sortByArg a [] = []
@@ -309,12 +311,12 @@ makeDisjArgs call d = makeDisjArgs' 0 d call
 Idea is if the argument is decreasing we don't need to care about the disjunct, so we only put non-trivial
 entries in the disjunct columns if there's an entry which increases
 -}
-makeDisjArgs' ret d [] = N ret d
+makeDisjArgs' ret d [] = P (Left ret) [] [] d
 makeDisjArgs' ret d ((P n f t p):rs) | f == t = makeDisjArgs' ret d rs
                                      | f == d = makeDisjArgs' (ret - 1) d rs
                                      | t == d = makeDisjArgs' (ret + 1) d rs
                                      | otherwise = makeDisjArgs' ret d rs
-makeDisjArgs' ret d (r:rs) = makeDisjArgs' ret d rs
+--makeDisjArgs' ret d (r:rs) = makeDisjArgs' ret d rs
 
 
 
@@ -323,8 +325,8 @@ getArgsAndDisjs args disjs [] = (args, disjs)
 getArgsAndDisjs args disjs ((P n t f p):xs) = let args'  = (Set.insert p args)
                                                   disjs' = Set.insert t (Set.insert f disjs)
                                               in getArgsAndDisjs args' disjs' xs
-getArgsAndDisjs args disjs ((S v p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
-getArgsAndDisjs args disjs ((N n p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
+--getArgsAndDisjs args disjs ((S v p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
+--getArgsAndDisjs args disjs ((N n p):xs) = getArgsAndDisjs (Set.insert p args) disjs xs
 
 -- Processes a single recursive call
 --recCall :: Eq v => ([(Set v,Double,Path, Path)], [(Set v,Double,Path, Path)]) -> [PreMatrixEntry]
