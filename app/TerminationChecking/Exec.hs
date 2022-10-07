@@ -3,8 +3,7 @@
 module TerminationChecking.Exec where
 
 import Data.Bifunctor (bimap)
-import Data.List (find, permutations)
-import Control.Monad (join)
+import Data.List (find, intersect, nub, permutations)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -57,17 +56,15 @@ pattern_match (PPair p0 p1) (TPair s0 s1) =
   do
     b0 <- pattern_match p0 s0
     b1 <- pattern_match p1 s1
-    return (b0 ++ b1)
+    let conflicts = [ x | (x,t0) <- b0, (y,t1) <- b1, x == y, t0 /= t1 ]
+    if not.null $ conflicts
+      then Nothing
+      else return $ nub (b0 ++ b1)
 pattern_match (PNatLit n) (TNatLit m) | n == m = Just []
 pattern_match (PBoolLit n) (TBoolLit m) | n == m = Just []
 pattern_match (PSumL p) (TSumL s) = pattern_match p s
 pattern_match (PSumR p) (TSumR s) = pattern_match p s
 pattern_match (PRoll p) (TRoll s) = pattern_match p s
-  {-do
-    b <- pattern_match p s
-    if any (\(x,_) -> rp == x) b
-    then Nothing
-    else return b-}
 pattern_match _ _ = Nothing
 
 
