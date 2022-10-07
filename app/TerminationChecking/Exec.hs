@@ -3,7 +3,7 @@
 module TerminationChecking.Exec where
 
 import Data.Bifunctor (bimap)
-import Data.List (find, intersect, nub, permutations)
+import Data.List (permutations)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -27,45 +27,8 @@ data Value v =
   VContinuation (State v) v (Term v) |
   VSumL (Value v) |
   VSumR (Value v) |
-  VRoll (Value v) |
-  VUnroll (Value v)
+  VRoll (Value v)
   deriving (Eq, Show)
-
-
-type Binding v = [(v, Term v)]
-
-subst_term :: Eq v => Binding v -> Term v -> Term v
-subst_term b (TVar x) = b |> find ((==) x . fst)
-                          |> maybe (TVar x) snd
-subst_term b TUnit = TUnit
-subst_term b (TPair s t) = TPair (subst_term b s) (subst_term b t)
-subst_term b (TNatLit n) = TNatLit n
-subst_term b (TBoolLit n) = TBoolLit n
-subst_term b (TIf sb stt sff) = TIf (subst_term b sb) (subst_term b stt) (subst_term b sff)
-subst_term b (TLambda x s) = TLambda x (subst_term (b |> filter ((/=) x . fst)) s)
-subst_term b (TApp s0 s1) = TApp (subst_term b s0) (subst_term b s1)
-subst_term b (TSumL s) = TSumL (subst_term b s)
-subst_term b (TSumR s) = TSumR (subst_term b s)
-subst_term b (TRoll s) = TRoll (subst_term b s)
-subst_term b (TUnroll s) = TUnroll (subst_term b s)
-
-pattern_match :: Eq v => Pattern v -> Term v -> Maybe (Binding v)
-pattern_match (PVar x) t = Just [(x,t)]
-pattern_match PUnit TUnit = Just []
-pattern_match (PPair p0 p1) (TPair s0 s1) =
-  do
-    b0 <- pattern_match p0 s0
-    b1 <- pattern_match p1 s1
-    let conflicts = [ x | (x,t0) <- b0, (y,t1) <- b1, x == y, t0 /= t1 ]
-    if not.null $ conflicts
-      then Nothing
-      else return $ nub (b0 ++ b1)
-pattern_match (PNatLit n) (TNatLit m) | n == m = Just []
-pattern_match (PBoolLit n) (TBoolLit m) | n == m = Just []
-pattern_match (PSumL p) (TSumL s) = pattern_match p s
-pattern_match (PSumR p) (TSumR s) = pattern_match p s
-pattern_match (PRoll p) (TRoll s) = pattern_match p s
-pattern_match _ _ = Nothing
 
 
 data PathToken = La | Ra | Ld | Rd deriving (Eq, Show, Ord)
@@ -99,7 +62,6 @@ term_var_depths n s a b (TBoolLit bool) = [(BoolLit bool, (fmap fromIntegral n),
 term_var_depths n s a b (TSumL p) = if b then term_var_depths n (Ld:s) a b p else term_var_depths n s a b p
 term_var_depths n s a b (TSumR p) = if b then term_var_depths n (Rd:s) a b p else term_var_depths n s a b p
 term_var_depths n s a b (TRoll p) = term_var_depths ((+) <$> n <*> (Just 1)) s a False p
-term_var_depths n s a b (TUnroll p) = term_var_depths ((-) <$> n <*> (Just 1)) s a b p
 term_var_depths n s a b (TApp p r) = term_var_depths n s a False p ++ term_var_depths Nothing s a False r
 -- TODO: add if-then-else?
 
@@ -110,10 +72,8 @@ term_find_rec rn (TSumR s) = term_find_rec rn s
 term_find_rec rn (TRoll s) = term_find_rec rn s
 term_find_rec rn (TIf sb st sf) =
   term_find_rec rn sb ++ term_find_rec rn st ++ term_find_rec rn sf
-term_find_rec rn (TLambda x s) | x /= rn = term_find_rec rn s
 term_find_rec rn (TApp (TVar x) s1) | rn == x = s1 : term_find_rec rn s1
 term_find_rec rn (TApp s0 s1) = term_find_rec rn s0 ++ term_find_rec rn s1
-term_find_rec rn (TUnroll s) = term_find_rec rn s
 term_find_rec _ _ = []
 
 fun_apply :: Eq v => FunDef v -> Term v -> Maybe (Term v)
@@ -134,9 +94,6 @@ eval st (TIf tb tt tf) =
     VBool True  -> eval st tt
     VBool False -> eval st tf
     _ -> VUndefined
-eval st (TLambda x t) = VContinuation st x t
-eval st (TApp (TLambda x t0) t1) =
-  eval st (subst_term [(x, t1)] t0)
 eval st (TApp (TVar xfn) t) =
   case Map.lookup xfn st of
     Just (VFunDef fdefn) ->
@@ -145,8 +102,6 @@ eval st (TApp (TVar xfn) t) =
         Nothing -> VUndefined
     Nothing -> VUndefined
 eval st (TRoll e) = VRoll (eval st e)
-eval st (TUnroll (TRoll e)) = eval st e
-eval st (TUnroll e) = VUnroll (eval st e)
 eval st (TSumL e) = VSumL (eval st e)
 eval st (TSumR e) = VSumR (eval st e)
 eval st (TApp _ _) = VUndefined

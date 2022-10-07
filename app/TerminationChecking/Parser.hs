@@ -148,9 +148,8 @@ single_term_parser =
   <|> try (TSumL    <$> (symbol "Left"  *> term_parser) <?> "term left sum")
   <|> try (TSumR    <$> (symbol "Right" *> term_parser) <?> "term right sum")
   <|> try (TRoll    <$> (symbol "Roll"   *> term_parser) <?> "term roll")
-  <|> try (TUnroll  <$> (symbol "Unroll" *> term_parser) <?> "term unroll")
   <|> (TNatLit <$> natural <?> "term natural literal")
   <|> (TVar    <$> identifier <?> "term var")
   <|> (TOp     <$> operator <?> "term operator")
-  <|> (TLambda <$> try (symbol "\\" *> identifier) <*> try (symbol "->" *> term_parser) <?> "term lambda")
+  -- <|> (TLambda <$> try (symbol "\\" *> identifier) <*> try (symbol "->" *> term_parser) <?> "term lambda")
   ) <?> "term single"

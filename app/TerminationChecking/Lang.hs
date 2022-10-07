@@ -2,6 +2,7 @@
 module TerminationChecking.Lang where
 
 import qualified Data.Map as M
+import Data.List (nub, find)
 
 import Debug.Trace
 
@@ -16,16 +17,11 @@ data Term v =
   TNatLit Integer |
   TPair (Term v) (Term v) |
   TIf (Term v) (Term v) (Term v) |
-  TLambda v (Term v) |
   TApp (Term v) (Term v) |
   TSumL (Term v) |
   TSumR (Term v) |
-  TRoll (Term v) |
-  TUnroll (Term v)
+  TRoll (Term v)
   deriving (Eq, Show)
-
-tlet :: v -> (Term v) -> (Term v) -> (Term v)
-tlet x s t = TApp (TLambda x t) s
 
 data Pattern v =
   PVar v |
@@ -57,3 +53,45 @@ pattern_count_vars (PRoll p)  m = pattern_count_vars p m
 
 pattern_dup_vars :: (Show v, Ord v) => Pattern v -> [v]
 pattern_dup_vars p = pattern_count_vars p M.empty |> M.filter (>0) |> M.keys
+
+
+type Binding v = [(v, Term v)]
+
+subst_term :: Eq v => Binding v -> Term v -> Term v
+subst_term b (TVar x) = b |> find ((==) x . fst)
+                          |> maybe (TVar x) snd
+subst_term b TUnit = TUnit
+subst_term b (TPair s t) = TPair (subst_term b s) (subst_term b t)
+subst_term b (TNatLit n) = TNatLit n
+subst_term b (TBoolLit n) = TBoolLit n
+subst_term b (TIf sb stt sff) = TIf (subst_term b sb) (subst_term b stt) (subst_term b sff)
+subst_term b (TApp s0 s1) = TApp (subst_term b s0) (subst_term b s1)
+subst_term b (TSumL s) = TSumL (subst_term b s)
+subst_term b (TSumR s) = TSumR (subst_term b s)
+subst_term b (TRoll s) = TRoll (subst_term b s)
+
+pattern_match :: Eq v => Pattern v -> Term v -> Maybe (Binding v)
+pattern_match (PVar x) t = Just [(x,t)]
+pattern_match PUnit TUnit = Just []
+pattern_match (PPair p0 p1) (TPair s0 s1) =
+  do
+    b0 <- pattern_match p0 s0
+    b1 <- pattern_match p1 s1
+    let conflicts = [ x | (x,t0) <- b0, (y,t1) <- b1, x == y, t0 /= t1 ]
+    if not.null $ conflicts
+      then Nothing
+      else return $ nub (b0 ++ b1)
+pattern_match (PNatLit n) (TNatLit m) | n == m = Just []
+pattern_match (PBoolLit n) (TBoolLit m) | n == m = Just []
+pattern_match (PSumL p) (TSumL s) = pattern_match p s
+pattern_match (PSumR p) (TSumR s) = pattern_match p s
+pattern_match (PRoll p) (TRoll s) = pattern_match p s
+pattern_match _ _ = Nothing
+
+{- A function to construct
+  let x = s
+   in t
+  expressions.
+-}
+tlet :: Eq v => v -> Term v -> Term v -> Term v
+tlet x s t = subst_term [(x,s)] t
