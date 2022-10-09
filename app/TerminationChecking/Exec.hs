@@ -173,7 +173,7 @@ matrixify name fun = matrixified
         {-
         We now add in columns to our matrix to take account of different disjuncts.
         -}
-        disjs = Set.toList $ snd (argsAndDisjs mat)
+        disjs = filter (\x -> x /= []) (Set.toList $ snd (argsAndDisjs mat))
         matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
 
         -- This just givs a set of all the different aguments and disjuncts in our function
