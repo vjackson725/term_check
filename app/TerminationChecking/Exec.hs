@@ -2,7 +2,8 @@
 
 module TerminationChecking.Exec where
 
-import Data.Bifunctor (bimap)
+import Data.Bifunctor (bimap, first)
+import Data.Maybe (mapMaybe)
 import Data.List (permutations)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -30,6 +31,66 @@ data Value v =
   VRoll (Value v)
   deriving (Eq, Show)
 
+data ArgShape =
+  ASEnd |
+  ASUnit |
+  ASBoolLit Bool |
+  ASNatLit Integer |
+  ASPair ArgShape ArgShape |
+  ASSum ArgShape ArgShape |
+  ASRoll ArgShape
+  deriving (Eq, Show)
+
+term_to_argshape :: Term v -> (ArgShape, [(v, ArgShape)])
+term_to_argshape (TVar x) = (ASEnd, [])
+term_to_argshape TUnit = (ASUnit, [])
+term_to_argshape (TPair t0 t1) =
+  let (a0, a0s) = term_to_argshape t0
+      (a1, a1s) = term_to_argshape t1
+   in (ASPair a0 a1, a0s ++ a1s)
+term_to_argshape (TNatLit n) = (ASNatLit n, [])
+term_to_argshape (TBoolLit b) = (ASBoolLit b, [])
+term_to_argshape (TSumL t) = first (flip ASSum ASEnd) $ term_to_argshape t
+term_to_argshape (TSumR t) = first (ASSum ASEnd) $ term_to_argshape t
+term_to_argshape (TRoll t) = first ASRoll $ term_to_argshape t
+term_to_argshape (TApp (TVar f) t) =
+  (ASEnd, uncurry (:) $ first (f,) $ term_to_argshape t)
+term_to_argshape (TApp t0 t1) =
+  let (_, as) = term_to_argshape t0
+      (_, bs) = term_to_argshape t1
+   in (ASEnd, as ++ bs)
+
+pattern_to_argshape :: Pattern v -> ArgShape
+pattern_to_argshape (PVar x) = ASEnd
+pattern_to_argshape PUnit = ASUnit
+pattern_to_argshape (PPair p0 p1) =
+  let a0 = pattern_to_argshape p0
+      a1 = pattern_to_argshape p1
+   in (ASPair a0 a1)
+pattern_to_argshape (PNatLit n) = ASNatLit n
+pattern_to_argshape (PBoolLit b) = ASBoolLit b
+pattern_to_argshape (PSumL p) = flip ASSum ASEnd $ pattern_to_argshape p
+pattern_to_argshape (PSumR p) = ASSum ASEnd $ pattern_to_argshape p
+pattern_to_argshape (PRoll p) = ASRoll $ pattern_to_argshape p
+
+merge_argshape :: ArgShape -> ArgShape -> Maybe ArgShape
+merge_argshape ASEnd b = Just b
+merge_argshape a ASEnd = Just a
+merge_argshape ASUnit ASUnit = Just ASUnit
+merge_argshape (ASBoolLit b0) (ASBoolLit b1) | b0 == b1 = Just (ASBoolLit b0)
+merge_argshape (ASNatLit n0) (ASNatLit n1) | n0 == n1 = Just (ASNatLit n0)
+merge_argshape (ASPair a0 a1) (ASPair b0 b1) =
+  do
+    c0 <- merge_argshape a0 b0
+    c1 <- merge_argshape a1 b1
+    return $ ASPair c0 c1
+merge_argshape (ASSum a0 a1) (ASSum b0 b1) =
+  do
+    c0 <- merge_argshape a0 b0
+    c1 <- merge_argshape a1 b1
+    return $ ASSum c0 c1
+merge_argshape (ASRoll a) (ASRoll b) = ASRoll <$> merge_argshape a b
+merge_argshape _ _ = Nothing
 
 data PathToken = La | Ra | Ld | Rd deriving (Eq, Show, Ord)
 
@@ -123,69 +184,81 @@ data Entry = Num Double | Sym Val deriving (Eq, Show)
 matrixify :: Ord v => v -> FunDef v -> [[Entry]]
 matrixify name fun = matrixified
     where
+      fundef = fun
+      shapes =
+        fundef
+        |> concatMap (\(p,t) ->
+                        let
+                          pshape = pattern_to_argshape p 
+                          tshapes = (mapMaybe (\(a,b) -> if name == a then Just b else Nothing) . snd . term_to_argshape) $ t
+                        in
+                          pshape : tshapes)
 
-        {-
-        Takes in a function definition and turns it into a list of pairs of depths of variables in
-        the pattern and depths of variables in the term in each recursive call
-        -}
-        {-m = map
-            (\(p, s) ->
-              ( pattern_var_depths 0 p [] [] True
-              , join (map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s))
-              )
-            ) fun-}
-        m = do
-              (p, s) <- fun
-              let a = map (\(a, b, c, d) -> (a, Just b, c, d)) (pattern_var_depths 0 [] [] True p)
-              map ((a,) . term_var_depths (Just 0) [] [] True) (term_find_rec name s)
+      shape = shapes |> foldr (\a b -> b >>= merge_argshape a) (Just ASEnd)
 
-        -- [] in the term_depth corresponds to having a constant in there
-        -- so we filter out by it so as to not consider things like f(x) = f(3) etc.
-        -- Currently not working quite as intended as function calls are assigned [] depth
-        -- as a placeholder, meaning we assume all auxilliary functions terminate (the intention
-        -- was to make the opposite assumption for now)
-        filtM = filter (not.null.snd) m
+      {-
+      Takes in a function definition and turns it into a list of pairs of depths of variables in
+      the pattern and depths of variables in the term in each recursive call
+      -}
+      {-m = map
+          (\(p, s) ->
+            ( pattern_var_depths 0 p [] [] True
+            , join (map (\x -> term_var_depths 0 x [] [] True) (term_find_rec name s))
+            )
+          ) fun
+      -}
+      m = do
+            (p, s) <- fun
+            let a = map (\(a, b, c, d) -> (a, Just b, c, d)) (pattern_var_depths 0 [] [] True p)
+            map ((a,) . term_var_depths (Just 0) [] [] True) (term_find_rec name s)
 
-        {-
-        m' is a further filtration of filtM which removes non-max depth variables and collectes
-        max-depth variables into a single set such that there is only one max-depth variable for
-        each argument.
+      -- [] in the term_depth corresponds to having a constant in there
+      -- so we filter out by it so as to not consider things like f(x) = f(3) etc.
+      -- Currently not working quite as intended as function calls are assigned [] depth
+      -- as a placeholder, meaning we assume all auxilliary functions terminate (the intention
+      -- was to make the opposite assumption for now)
+      filtM = filter (not.null.snd) m
 
-        For example, if we consider a type data BTree = Leaf | BNode Integer BTree BTree
-        we might have f (BNode n t1 t2, BNode n' t1' t2') = f (t1, t2) + f(BNode n' t1 t1', t2'). Here,
-        we would want to convert this to:
-        [({n, t1, t2}, t1), ({n', t1', t2'}, t2), ({n, t1, t2}, {n', t1, t1'}), ({n', t1', t2'}, t2')]
+      {-
+      m' is a further filtration of filtM which removes non-max depth variables and collectes
+      max-depth variables into a single set such that there is only one max-depth variable for
+      each argument.
 
-        -}
-        m' = map (bimap list_convert list_convert) filtM
+      For example, if we consider a type data BTree = Leaf | BNode Integer BTree BTree
+      we might have f (BNode n t1 t2, BNode n' t1' t2') = f (t1, t2) + f(BNode n' t1 t1', t2'). Here,
+      we would want to convert this to:
+      [({n, t1, t2}, t1), ({n', t1', t2'}, t2), ({n, t1, t2}, {n', t1, t1'}), ({n', t1', t2'}, t2')]
 
-        {-
-        This turns our pairs of depths and arguments etc. into something resembling our final matrix; a matrix of
-        pre-matrix entries. These are just like regular matrix entries, but they keep track explicitly of which
-        argument and disjunct each entry is coming from. This is because our matrix will not be sorted yet. This is
-        more or less just a way of rephrasing the information stored in the pairs, but we've now explicitly calculated
-        which entry will go in that arg-disj spot.
+      -}
+      m' = map (bimap list_convert list_convert) filtM
 
-        -}
-        mat = map recCall m' --is our temp matrix, then we do some processing on this
-        --etc for other kinds of args
+      {-
+      This turns our pairs of depths and arguments etc. into something resembling our final matrix; a matrix of
+      pre-matrix entries. These are just like regular matrix entries, but they keep track explicitly of which
+      argument and disjunct each entry is coming from. This is because our matrix will not be sorted yet. This is
+      more or less just a way of rephrasing the information stored in the pairs, but we've now explicitly calculated
+      which entry will go in that arg-disj spot.
 
-        {-
-        We now add in columns to our matrix to take account of different disjuncts.
-        -}
-        disjs = filter (\x -> x /= []) (Set.toList $ snd (argsAndDisjs mat))
-        matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
+      -}
+      mat = map recCall m' --is our temp matrix, then we do some processing on this
+      --etc for other kinds of args
 
-        -- This just givs a set of all the different aguments and disjuncts in our function
-        ads = argsAndDisjs matWithDisjArgs
-        arguments = Set.toList $ fst ads
+      {-
+      We now add in columns to our matrix to take account of different disjuncts.
+      -}
+      disjs = filter (\x -> x /= []) (Set.toList $ snd (argsAndDisjs mat))
+      matWithDisjArgs = map (makeDisjArgsAllDisjs disjs) mat
 
-        {-
-        Now that all of the disjuncts are codefied with arguments, we just have to sort all of
-            the entries by their argument by placing them in a unique column associated with their
-            argument (of course, the row is already taken care of)
-        -}
-        matrixified = map (flip sortByArg matWithDisjArgs) arguments
+      -- This just givs a set of all the different aguments and disjuncts in our function
+      ads = argsAndDisjs matWithDisjArgs
+      arguments = Set.toList $ fst ads
+
+      {-
+      Now that all of the disjuncts are codefied with arguments, we just have to sort all of
+          the entries by their argument by placing them in a unique column associated with their
+          argument (of course, the row is already taken care of)
+      -}
+      matrixified = map (flip sortByArg matWithDisjArgs) arguments
 
 
 
