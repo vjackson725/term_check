@@ -206,19 +206,29 @@ data PreMatrixEntry = P (Either Double Val) Path Path Path deriving (Eq, Show)
 data Entry = Num Double | Sym Val deriving (Eq, Show)
 
 matrixify :: (Ord v, Show v) => v -> FunDef v -> [[Entry]]
-matrixify name fun = traceShow (shape, measures) $ matrixified
+matrixify name fun = traceShow (shapes, measures) $ matrixified
     where
       fundef = fun
 
+      shapes :: [Maybe ArgShape]
       shapes =
         fundef
-        |> concatMap (\(p,t) ->
+        |> map (\(p,t) ->
                         let
                           pshape = pattern_to_argshape p 
-                          tshapes = (mapMaybe (\(a,b) -> if name == a then Just b else Nothing) . snd . term_to_argshape) $ t
+                          tshapes =
+                            t
+                            |> term_to_argshape
+                            |> snd
+                            |> mapMaybe (\(a,b) -> if name == a then Just b else Nothing)
                         in
-                          pshape : tshapes)
-      shape = shapes |> foldr (\a b -> b >>= merge_argshape a) (Just ASEnd)
+                          (pshape, tshapes))
+        |> foldr
+            (\(aa, tshapes) (ba, ts) ->
+              (ba >>= merge_argshape aa, tshapes ++ ts))
+            (Just ASEnd, [])
+        |> (\(ashape,cshapes) ->
+              map (\c -> ashape >>= merge_argshape c) cshapes)
       measures = make_measures <$> shape
 
       {-
