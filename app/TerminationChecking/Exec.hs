@@ -92,6 +92,30 @@ merge_argshape (ASSum a0 a1) (ASSum b0 b1) =
 merge_argshape (ASRoll a) (ASRoll b) = ASRoll <$> merge_argshape a b
 merge_argshape _ _ = Nothing
 
+
+data MeasureStep =
+  MNat |
+  MPairL |
+  MPairR |
+  MSumL |
+  MSumR |
+  MRoll
+  deriving (Show, Eq)
+
+type Measure = [MeasureStep]
+
+make_measures :: ArgShape -> [Measure]
+make_measures = make_measures_aux []
+  where
+    make_measures_aux :: Measure -> ArgShape -> [Measure]
+    make_measures_aux m (ASEnd) = [reverse m]
+    make_measures_aux m (ASUnit) = []
+    make_measures_aux m (ASBoolLit b) = []
+    make_measures_aux m (ASNatLit n) = []
+    make_measures_aux m (ASPair a0 a1) = make_measures_aux (MPairL:m) a0 ++ make_measures_aux (MPairR:m) a1
+    make_measures_aux m (ASSum a0 a1) = make_measures_aux (MSumL:m) a0 ++ make_measures_aux (MSumR:m) a1
+    make_measures_aux m (ASRoll a) = make_measures_aux (MRoll:m) a
+
 data PathToken = La | Ra | Ld | Rd deriving (Eq, Show, Ord)
 
 type Path = [PathToken]
@@ -181,10 +205,11 @@ instance Show Val where
 data PreMatrixEntry = P (Either Double Val) Path Path Path deriving (Eq, Show)
 data Entry = Num Double | Sym Val deriving (Eq, Show)
 
-matrixify :: Ord v => v -> FunDef v -> [[Entry]]
-matrixify name fun = matrixified
+matrixify :: (Ord v, Show v) => v -> FunDef v -> [[Entry]]
+matrixify name fun = traceShow (shape, measures) $ matrixified
     where
       fundef = fun
+
       shapes =
         fundef
         |> concatMap (\(p,t) ->
@@ -193,8 +218,8 @@ matrixify name fun = matrixified
                           tshapes = (mapMaybe (\(a,b) -> if name == a then Just b else Nothing) . snd . term_to_argshape) $ t
                         in
                           pshape : tshapes)
-
       shape = shapes |> foldr (\a b -> b >>= merge_argshape a) (Just ASEnd)
+      measures = make_measures <$> shape
 
       {-
       Takes in a function definition and turns it into a list of pairs of depths of variables in
