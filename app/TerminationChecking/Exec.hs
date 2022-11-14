@@ -3,8 +3,8 @@
 module TerminationChecking.Exec where
 
 import Data.Bifunctor (bimap, first)
-import Data.Maybe (mapMaybe)
-import Data.List (permutations)
+import Data.Maybe (mapMaybe, maybeToList)
+import Data.List (nub, permutations)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -229,7 +229,7 @@ matrixify name fun = traceShow (shapes, measures) $ matrixified
             (Just ASEnd, [])
         |> (\(ashape,cshapes) ->
               map (\c -> ashape >>= merge_argshape c) cshapes)
-      measures = make_measures <$> shape
+      measures = nub $ concatMap (concatMap make_measures . maybeToList) shapes
 
       {-
       Takes in a function definition and turns it into a list of pairs of depths of variables in
