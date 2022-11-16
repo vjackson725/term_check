@@ -31,88 +31,41 @@ data Value v =
   VRoll (Value v)
   deriving (Eq, Show)
 
-data ArgShape =
-  ASEnd |
-  ASUnit |
-  ASBoolLit Bool |
-  ASNatLit Integer |
-  ASPair ArgShape ArgShape |
-  ASSum ArgShape ArgShape |
-  ASRoll ArgShape
-  deriving (Eq, Show)
 
-term_to_argshape :: Term v -> (ArgShape, [(v, ArgShape)])
-term_to_argshape (TVar x) = (ASEnd, [])
-term_to_argshape TUnit = (ASUnit, [])
-term_to_argshape (TPair t0 t1) =
-  let (a0, a0s) = term_to_argshape t0
-      (a1, a1s) = term_to_argshape t1
-   in (ASPair a0 a1, a0s ++ a1s)
-term_to_argshape (TNatLit n) = (ASNatLit n, [])
-term_to_argshape (TBoolLit b) = (ASBoolLit b, [])
-term_to_argshape (TSumL t) = first (flip ASSum ASEnd) $ term_to_argshape t
-term_to_argshape (TSumR t) = first (ASSum ASEnd) $ term_to_argshape t
-term_to_argshape (TRoll t) = first ASRoll $ term_to_argshape t
-term_to_argshape (TApp (TVar f) t) =
-  (ASEnd, uncurry (:) $ first (f,) $ term_to_argshape t)
-term_to_argshape (TApp t0 t1) =
-  let (_, as) = term_to_argshape t0
-      (_, bs) = term_to_argshape t1
-   in (ASEnd, as ++ bs)
+pattern_to_term :: Pattern v -> Term v
+pattern_to_term (PVar x) = TVar x
+pattern_to_term PUnit = TUnit
+pattern_to_term (PPair p0 p1) =
+  TPair (pattern_to_term p0) (pattern_to_term p1)
+pattern_to_term (PNatLit n) = TNatLit n
+pattern_to_term (PBoolLit b) = TBoolLit b
+pattern_to_term (PSumL p) = TSumL $ pattern_to_term p
+pattern_to_term (PSumR p) = TSumR $ pattern_to_term p
+pattern_to_term (PRoll p) = TRoll $ pattern_to_term p
 
-pattern_to_argshape :: Pattern v -> ArgShape
-pattern_to_argshape (PVar x) = ASEnd
-pattern_to_argshape PUnit = ASUnit
-pattern_to_argshape (PPair p0 p1) =
-  let a0 = pattern_to_argshape p0
-      a1 = pattern_to_argshape p1
-   in (ASPair a0 a1)
-pattern_to_argshape (PNatLit n) = ASNatLit n
-pattern_to_argshape (PBoolLit b) = ASBoolLit b
-pattern_to_argshape (PSumL p) = flip ASSum ASEnd $ pattern_to_argshape p
-pattern_to_argshape (PSumR p) = ASSum ASEnd $ pattern_to_argshape p
-pattern_to_argshape (PRoll p) = ASRoll $ pattern_to_argshape p
-
--- Calculate the argshape that include the information of both argshapes
-glb_argshape :: ArgShape -> ArgShape -> Maybe ArgShape
-glb_argshape ASEnd b = Just b
-glb_argshape a ASEnd = Just a
-glb_argshape ASUnit ASUnit = Just ASUnit
-glb_argshape (ASBoolLit b0) (ASBoolLit b1) | b0 == b1 = Just (ASBoolLit b0)
-glb_argshape (ASNatLit n0) (ASNatLit n1) | n0 == n1 = Just (ASNatLit n0)
-glb_argshape (ASPair a0 a1) (ASPair b0 b1) =
-  do
-    c0 <- glb_argshape a0 b0
-    c1 <- glb_argshape a1 b1
-    return $ ASPair c0 c1
-glb_argshape (ASSum a0 a1) (ASSum b0 b1) =
-  do
-    c0 <- glb_argshape a0 b0
-    c1 <- glb_argshape a1 b1
-    return $ ASSum c0 c1
-glb_argshape (ASRoll a) (ASRoll b) = ASRoll <$> glb_argshape a b
-glb_argshape _ _ = Nothing
-
--- Calculate the argshape that is a subtree of both argshapes
-lub_argshape :: ArgShape -> ArgShape -> Maybe ArgShape
-lub_argshape ASEnd _ = Just ASEnd
-lub_argshape _ ASEnd = Just ASEnd
-lub_argshape ASUnit ASUnit = Just ASUnit
-lub_argshape (ASBoolLit b0) (ASBoolLit b1) | b0 == b1 = Just (ASBoolLit b0)
-lub_argshape (ASNatLit n0) (ASNatLit n1) | n0 == n1 = Just (ASNatLit n0)
-lub_argshape (ASPair a0 a1) (ASPair b0 b1) =
-  do
-    c0 <- lub_argshape a0 b0
-    c1 <- lub_argshape a1 b1
-    return $ ASPair c0 c1
-lub_argshape (ASSum a0 a1) (ASSum b0 b1) =
-  do
-    c0 <- lub_argshape a0 b0
-    c1 <- lub_argshape a1 b1
-    return $ ASSum c0 c1
-lub_argshape (ASRoll a) (ASRoll b) = ASRoll <$> lub_argshape a b
-lub_argshape _ _ = Nothing
-
+term_to_callterms :: Term v -> [(v, Term v)]
+term_to_callterms = snd . term_to_callterms_aux
+  where
+    term_to_callterms_aux :: Term v -> (Term v, [(v, Term v)])
+    term_to_callterms_aux a@(TVar x)   = (a, [])
+    term_to_callterms_aux a@TUnit      = (a, [])
+    term_to_callterms_aux a@TNatLit{}  = (a, [])
+    term_to_callterms_aux a@TBoolLit{} = (a, [])
+    term_to_callterms_aux (TPair t0 t1) =
+      let (a0, a0s) = term_to_callterms_aux t0
+          (a1, a1s) = term_to_callterms_aux t1
+      in (TPair a0 a1, a0s ++ a1s)
+    term_to_callterms_aux (TSumL t) = first TSumL $ term_to_callterms_aux t
+    term_to_callterms_aux (TSumR t) = first TSumR $ term_to_callterms_aux t
+    term_to_callterms_aux (TRoll t) = first TRoll $ term_to_callterms_aux t
+    term_to_callterms_aux (TApp (TVar f) t) =
+      (TUnit, uncurry (:) $ first (f,) $ term_to_callterms_aux t)
+    term_to_callterms_aux (TApp t0 t1) =
+      let (_, as) = term_to_callterms_aux t0
+          (_, bs) = term_to_callterms_aux t1
+      in (TUnit, as ++ bs)
+    -- TODO: in the TApp cases, the value is not actually TUnit, though it might
+    --       be fine.
 
 data MeasureStep =
   MNat |
@@ -125,17 +78,36 @@ data MeasureStep =
 
 type Measure = [MeasureStep]
 
-make_measures :: ArgShape -> [Measure]
+measure_recursive :: Eq v => v -> Term v -> [Measure]
+measure_recursive x t = measure_recursive_aux [] x t
+  where
+    measure_recursive_aux :: Eq v => Measure -> v -> Term v -> [Measure]
+    measure_recursive_aux m x (TVar y) = (if x == y then [reverse m] else [])
+    measure_recursive_aux m x TUnit = []
+    measure_recursive_aux m x (TBoolLit b0) = []
+    measure_recursive_aux m x (TNatLit n0) = []
+    measure_recursive_aux m x (TPair a b) =
+      measure_recursive_aux (MPairL:m) x a ++ measure_recursive_aux (MPairR:m) x b
+    measure_recursive_aux m x (TSumL a) = measure_recursive_aux (MSumL:m) x a
+    measure_recursive_aux m x (TSumR a) = measure_recursive_aux (MSumR:m) x a
+    measure_recursive_aux m x (TRoll a) = measure_recursive_aux (MRoll:m) x a
+
+make_measures :: Eq v => Term v -> Term v -> [(Measure, Measure)]
 make_measures = make_measures_aux []
   where
-    make_measures_aux :: Measure -> ArgShape -> [Measure]
-    make_measures_aux m (ASEnd) = [reverse m]
-    make_measures_aux m (ASUnit) = []
-    make_measures_aux m (ASBoolLit b) = []
-    make_measures_aux m (ASNatLit n) = []
-    make_measures_aux m (ASPair a0 a1) = make_measures_aux (MPairL:m) a0 ++ make_measures_aux (MPairR:m) a1
-    make_measures_aux m (ASSum a0 a1) = make_measures_aux (MSumL:m) a0 ++ make_measures_aux (MSumR:m) a1
-    make_measures_aux m (ASRoll a) = make_measures_aux (MRoll:m) a
+    make_measures_aux :: Eq v => Measure -> Term v -> Term v -> [(Measure, Measure)]
+    make_measures_aux m t (TVar x) = map (reverse m,) $ measure_recursive x t
+    make_measures_aux m (TVar x) t = map (reverse m,) $ measure_recursive x t
+    make_measures_aux _ TUnit TUnit = []
+    make_measures_aux _ (TBoolLit b0) (TBoolLit b1) = []
+    make_measures_aux _ (TNatLit n0) (TNatLit n1) = []
+    make_measures_aux m (TPair a0 a1) (TPair b0 b1) =
+      make_measures_aux (MPairL:m) a0 b0 ++ make_measures_aux (MPairR:m) a1 b1
+    make_measures_aux m (TSumL a) (TSumL b) = make_measures_aux (MSumL:m) a b
+    make_measures_aux m (TSumR a) (TSumR b) = make_measures_aux (MSumR:m) a b
+    make_measures_aux m (TRoll a) (TRoll b) = make_measures_aux (MRoll:m) a b
+    make_measures_aux m _ _ = []
+
 
 data PathToken = La | Ra | Ld | Rd deriving (Eq, Show, Ord)
 
@@ -232,18 +204,15 @@ matrixify name fun =
     where
       fundef = fun
 
-      shapes =
+      measures =
         fundef
         |> concatMap
           (\(p,t) ->
-            let pshape = pattern_to_argshape p 
-            in t
-                |> term_to_argshape
-                |> snd
-                |> mapMaybe (\(a,b) -> if name == a then lub_argshape pshape b else Nothing))
-        |> foldl (\acc a -> acc >>= glb_argshape a) (Just ASEnd)
-
-      measures = nub $ concatMap make_measures shapes
+            let argterm = pattern_to_term p 
+                callterms = mapMaybe
+                              (\(fn, t) -> if fn == name then Just t else Nothing)
+                              (term_to_callterms t)
+            in concatMap (make_measures argterm) callterms)
 
       {-
       Takes in a function definition and turns it into a list of pairs of depths of variables in
