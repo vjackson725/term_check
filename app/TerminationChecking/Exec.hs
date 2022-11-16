@@ -213,6 +213,7 @@ matrixify name fun =
                               (\(fn, t) -> if fn == name then Just t else Nothing)
                               (term_to_callterms t)
             in concatMap (make_measures argterm) callterms)
+        |> nub
 
       {-
       Takes in a function definition and turns it into a list of pairs of depths of variables in
