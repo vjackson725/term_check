@@ -3,7 +3,7 @@
 module TerminationChecking.Exec where
 
 import Data.Bifunctor (bimap, first)
-import Data.Maybe (mapMaybe, maybeToList)
+import Data.Maybe (mapMaybe, maybeToList, fromMaybe)
 import Data.List (nub, permutations)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -73,24 +73,45 @@ pattern_to_argshape (PSumL p) = flip ASSum ASEnd $ pattern_to_argshape p
 pattern_to_argshape (PSumR p) = ASSum ASEnd $ pattern_to_argshape p
 pattern_to_argshape (PRoll p) = ASRoll $ pattern_to_argshape p
 
-merge_argshape :: ArgShape -> ArgShape -> Maybe ArgShape
-merge_argshape ASEnd b = Just b
-merge_argshape a ASEnd = Just a
-merge_argshape ASUnit ASUnit = Just ASUnit
-merge_argshape (ASBoolLit b0) (ASBoolLit b1) | b0 == b1 = Just (ASBoolLit b0)
-merge_argshape (ASNatLit n0) (ASNatLit n1) | n0 == n1 = Just (ASNatLit n0)
-merge_argshape (ASPair a0 a1) (ASPair b0 b1) =
+-- Calculate the argshape that include the information of both argshapes
+glb_argshape :: ArgShape -> ArgShape -> Maybe ArgShape
+glb_argshape ASEnd b = Just b
+glb_argshape a ASEnd = Just a
+glb_argshape ASUnit ASUnit = Just ASUnit
+glb_argshape (ASBoolLit b0) (ASBoolLit b1) | b0 == b1 = Just (ASBoolLit b0)
+glb_argshape (ASNatLit n0) (ASNatLit n1) | n0 == n1 = Just (ASNatLit n0)
+glb_argshape (ASPair a0 a1) (ASPair b0 b1) =
   do
-    c0 <- merge_argshape a0 b0
-    c1 <- merge_argshape a1 b1
+    c0 <- glb_argshape a0 b0
+    c1 <- glb_argshape a1 b1
     return $ ASPair c0 c1
-merge_argshape (ASSum a0 a1) (ASSum b0 b1) =
+glb_argshape (ASSum a0 a1) (ASSum b0 b1) =
   do
-    c0 <- merge_argshape a0 b0
-    c1 <- merge_argshape a1 b1
+    c0 <- glb_argshape a0 b0
+    c1 <- glb_argshape a1 b1
     return $ ASSum c0 c1
-merge_argshape (ASRoll a) (ASRoll b) = ASRoll <$> merge_argshape a b
-merge_argshape _ _ = Nothing
+glb_argshape (ASRoll a) (ASRoll b) = ASRoll <$> glb_argshape a b
+glb_argshape _ _ = Nothing
+
+-- Calculate the argshape that is a subtree of both argshapes
+lub_argshape :: ArgShape -> ArgShape -> Maybe ArgShape
+lub_argshape ASEnd _ = Just ASEnd
+lub_argshape _ ASEnd = Just ASEnd
+lub_argshape ASUnit ASUnit = Just ASUnit
+lub_argshape (ASBoolLit b0) (ASBoolLit b1) | b0 == b1 = Just (ASBoolLit b0)
+lub_argshape (ASNatLit n0) (ASNatLit n1) | n0 == n1 = Just (ASNatLit n0)
+lub_argshape (ASPair a0 a1) (ASPair b0 b1) =
+  do
+    c0 <- lub_argshape a0 b0
+    c1 <- lub_argshape a1 b1
+    return $ ASPair c0 c1
+lub_argshape (ASSum a0 a1) (ASSum b0 b1) =
+  do
+    c0 <- lub_argshape a0 b0
+    c1 <- lub_argshape a1 b1
+    return $ ASSum c0 c1
+lub_argshape (ASRoll a) (ASRoll b) = ASRoll <$> lub_argshape a b
+lub_argshape _ _ = Nothing
 
 
 data MeasureStep =
@@ -206,30 +227,23 @@ data PreMatrixEntry = P (Either Double Val) Path Path Path deriving (Eq, Show)
 data Entry = Num Double | Sym Val deriving (Eq, Show)
 
 matrixify :: (Ord v, Show v) => v -> FunDef v -> [[Entry]]
-matrixify name fun = traceShow (shapes, measures) $ matrixified
+matrixify name fun =
+  traceShow measures $ matrixified
     where
       fundef = fun
 
-      shapes :: [Maybe ArgShape]
       shapes =
         fundef
-        |> map (\(p,t) ->
-                        let
-                          pshape = pattern_to_argshape p 
-                          tshapes =
-                            t
-                            |> term_to_argshape
-                            |> snd
-                            |> mapMaybe (\(a,b) -> if name == a then Just b else Nothing)
-                        in
-                          (pshape, tshapes))
-        |> foldr
-            (\(aa, tshapes) (ba, ts) ->
-              (ba >>= merge_argshape aa, tshapes ++ ts))
-            (Just ASEnd, [])
-        |> (\(ashape,cshapes) ->
-              map (\c -> ashape >>= merge_argshape c) cshapes)
-      measures = nub $ concatMap (concatMap make_measures . maybeToList) shapes
+        |> concatMap
+          (\(p,t) ->
+            let pshape = pattern_to_argshape p 
+            in t
+                |> term_to_argshape
+                |> snd
+                |> mapMaybe (\(a,b) -> if name == a then lub_argshape pshape b else Nothing))
+        |> foldl (\acc a -> acc >>= glb_argshape a) (Just ASEnd)
+
+      measures = nub $ concatMap make_measures shapes
 
       {-
       Takes in a function definition and turns it into a list of pairs of depths of variables in
