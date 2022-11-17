@@ -73,7 +73,9 @@ data MeasureStep =
   MPairR |
   MSumL |
   MSumR |
-  MRoll
+  MRoll |
+  MLLtR |
+  MRLtL
   deriving (Show, Eq)
 
 type Measure = [MeasureStep]
@@ -106,6 +108,10 @@ make_measures = make_measures_aux []
     make_measures_aux m (TSumL a) (TSumL b) = make_measures_aux (MSumL:m) a b
     make_measures_aux m (TSumR a) (TSumR b) = make_measures_aux (MSumR:m) a b
     make_measures_aux m (TRoll a) (TRoll b) = make_measures_aux (MRoll:m) a b
+    -- different sum conflict
+    make_measures_aux m (TSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
+    make_measures_aux m (TSumR a) (TSumL b) = [(reverse (MLLtR:m), [])]
+    -- conflict case
     make_measures_aux m _ _ = []
 
 
