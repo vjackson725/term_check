@@ -83,7 +83,7 @@ type Measure = [MeasureStep]
 measure_recursive :: Eq v => v -> Term v -> [Measure]
 measure_recursive x t = measure_recursive_aux [] x t
   where
-    measure_recursive_aux :: Eq v => Measure -> v -> Term v -> [Measure]
+    measure_recursive_aux :: Eq v => [MeasureStep] -> v -> Term v -> [Measure]
     measure_recursive_aux m x (TVar y) = (if x == y then [reverse m] else [])
     measure_recursive_aux m x TUnit = []
     measure_recursive_aux m x (TBoolLit b0) = []
@@ -97,7 +97,7 @@ measure_recursive x t = measure_recursive_aux [] x t
 make_measures :: Eq v => Term v -> Term v -> [(Measure, Measure)]
 make_measures = make_measures_aux []
   where
-    make_measures_aux :: Eq v => Measure -> Term v -> Term v -> [(Measure, Measure)]
+    make_measures_aux :: Eq v => [MeasureStep] -> Term v -> Term v -> [(Measure, Measure)]
     make_measures_aux m t (TVar x) = map (reverse m,) $ measure_recursive x t
     make_measures_aux m (TVar x) t = map (reverse m,) $ measure_recursive x t
     make_measures_aux _ TUnit TUnit = []
