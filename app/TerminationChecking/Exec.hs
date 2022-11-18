@@ -177,21 +177,21 @@ iterateFixp f a =
   let a' = f a
    in a' `seq` (if a == a' then a else iterateFixp f a')
 
-run_measure :: (Show v, Eq v) => Measure -> Term v -> (Int, Measure, Maybe (Term v))
+run_measure :: (Show v, Eq v) => Measure -> Term v -> (Int, Maybe (Measure, Term v))
 run_measure (base, rpath) tinit =
-  let (k, m, mt) = iterateFixp
-                    (\(k, m, mt) ->
-                      case mt of
-                        Nothing -> (k, m, mt)
-                        Just t ->
+  let (k, mmt) = iterateFixp
+                    (\(k, mmt) ->
+                      case mmt of
+                        Nothing -> (k, mmt)
+                        Just (m, t) ->
                           let ((j, mt'), m') = run_measure_steps m t
                            in if null m'
-                                then (k+j, rpath, mt')
+                                then (k+j, (rpath,) <$> mt')
                               else if m == m'
-                                then (k, m, mt) -- ASSERT: j == 0 && mt == mt'
-                              else (k+j, m', mt'))
-                    (0, base, Just tinit)
-   in (k, (m, rpath), mt)
+                                then (k, Just (m, t)) -- ASSERT: j == 0 && mt' == Some t
+                              else (k+j, (m',) <$> mt'))
+                    (0, Just (base,  tinit))
+   in (k, first (,rpath) <$> mmt)
   where
     run_measure_steps :: [MeasureStep] -> Term v -> ((Int, Maybe (Term v)), [MeasureStep])
     run_measure_steps msteps t =
@@ -244,16 +244,13 @@ matrixify name fundef = matrix
         (\m ->
           (m, map
             (\(a, b) ->
-              let (ka, ma, ta) = run_measure m a
-                  (kb, mb, tb) = run_measure m b
-              in (if ma == mb && ta == tb
+              let (ka, mmta) = run_measure m a
+                  (kb, mmtb) = run_measure m b
+              in (if mmta == mmtb || (not (null mmta) && null mmtb)
+                    -- Case 1: kb + |x| - (ka + |x|) == kb - ka
+                    -- Case 2: kb - (ka + |x|) <= kb - ka
                     then Num (toEnum (kb - ka))
-                  else if not (null ma) && null mb
-                    then Num (toEnum (kb - ka)) -- kb - (ka + |x|) <= kb - ka
-                  else 
-                    trace ("orig: " ++ show m ++ " / " ++ show a ++ " =?= " ++ show b) $
-                    trace (" new: " ++ show (ma,ta) ++ " =?= " ++ show (mb,tb)) $
-                    Sym Na))
+                  else Sym Na))
           argpairs))
         measures
     matrix = map snd $ (traceShowId reduced)
