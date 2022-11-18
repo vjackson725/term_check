@@ -214,9 +214,13 @@ run_measure (base, rpath) tinit =
     run_measure_step MRLtL  TSumL{} = Just (1, Nothing)
     run_measure_step _ _ = Nothing
 
-data Entry = Num Double | Sym Val deriving (Eq, Show)
+data Val = Na | Le | Leq
+  deriving (Show, Eq)
 
-matrixify :: (Ord v, Show v) => v -> FunDef v -> [[Entry]]
+data Entry = Num Double | Sym Val
+  deriving (Show, Eq)
+
+matrixify :: (Show v, Eq v) => v -> FunDef v -> [[Entry]]
 matrixify name fundef = matrix
   where
     argpairs =
