@@ -253,4 +253,4 @@ matrixify name fundef = matrix
                   else Sym Na))
           argpairs))
         measures
-    matrix = map snd $ (traceShowId reduced)
+    matrix = map snd {- . traceShowId -} $ reduced
