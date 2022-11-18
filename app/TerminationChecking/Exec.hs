@@ -1,6 +1,12 @@
 {-# LANGUAGE TupleSections #-}
 
-module TerminationChecking.Exec where
+module TerminationChecking.Exec
+  (
+    Entry(..),
+    Val(..),
+    matrixify,
+  )
+where
 
 import Data.Bifunctor (bimap, first)
 import Data.Maybe (mapMaybe, maybeToList, fromMaybe)
