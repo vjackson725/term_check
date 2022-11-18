@@ -205,8 +205,8 @@ run_measure (base, rpath) tinit =
         msteps
 
     run_measure_step :: MeasureStep -> Term v -> Maybe (Int, Maybe (Term v))
-    run_measure_step MPairL (TPair a b) = Just (0, Just a)
-    run_measure_step MPairR (TPair a b) = Just (0, Just b)
+    run_measure_step MPairL (TPair a _) = Just (0, Just a)
+    run_measure_step MPairR (TPair _ b) = Just (0, Just b)
     run_measure_step MSumL  (TSumL a) = Just (0, Just a)
     run_measure_step MSumR  (TSumR a) = Just (0, Just a)
     run_measure_step MRoll  (TRoll a) = Just (1, Just a)
@@ -248,7 +248,12 @@ matrixify name fundef = matrix
                   (kb, mb, tb) = run_measure m b
               in (if ma == mb && ta == tb
                     then Num (toEnum (kb - ka))
-                    else Sym Na))
+                  else if not (null ma) && null mb
+                    then Num (toEnum (kb - ka)) -- kb - (ka + |x|) <= kb - ka
+                  else 
+                    trace ("orig: " ++ show m ++ " / " ++ show a ++ " =?= " ++ show b) $
+                    trace (" new: " ++ show (ma,ta) ++ " =?= " ++ show (mb,tb)) $
+                    Sym Na))
           argpairs))
         measures
-    matrix = map snd reduced
+    matrix = map snd $ (traceShowId reduced)
