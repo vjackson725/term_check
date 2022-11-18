@@ -8,14 +8,13 @@ module TerminationChecking.Exec
   )
 where
 
-import Data.Bifunctor (bimap, first)
+import Data.Bifunctor (bimap, first, second)
 import Data.Maybe (mapMaybe, maybeToList, fromMaybe)
 import Data.List (nub, permutations)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Bifunctor (second)
 
 import Debug.Trace
 
@@ -40,19 +39,20 @@ data Value v =
   VRoll (Value v)
   deriving (Eq, Show)
 
-fun_apply :: Eq v => FunDef v -> Term v -> Maybe (Term v)
-fun_apply ((p,s_body):fs) s_arg =
+funApply :: Eq v => FunDef v -> Term v -> Maybe (Term v)
+funApply ((p,s_body):fs) s_arg =
   case pattern_match p s_arg of
     Just bnd -> Just $ subst_term bnd s_body
-    Nothing  -> fun_apply fs s_arg
-fun_apply [] t = Nothing
+    Nothing  -> funApply fs s_arg
+funApply [] t = Nothing
 
 -- big step; will loop on a non-terminating recursive definition
 eval :: (Eq v, Ord v) => State v -> Term v -> Value v
-eval st (TVar x) = Map.lookup x st |> maybe VUndefined id
+eval st (TVar x) = Map.lookup x st |> fromMaybe VUndefined
 eval st TUnit = VUnit
 eval st (TPair t0 t1) = VPair (eval st t0) (eval st t1)
 eval st (TNatLit n) = VNat n
+eval st (TBoolLit b) = VBool b
 eval st (TIf tb tt tf) =
   case eval st tb of
     VBool True  -> eval st tt
@@ -61,53 +61,57 @@ eval st (TIf tb tt tf) =
 eval st (TApp (TVar xfn) t) =
   case Map.lookup xfn st of
     Just (VFunDef fdefn) ->
-      case fun_apply fdefn t of
+      case funApply fdefn t of
         Just t' -> eval st t'
         Nothing -> VUndefined
+    Just _ -> error "state lookup must be a VFunDef"
     Nothing -> VUndefined
+eval st (TApp _ _) = VUndefined
 eval st (TRoll e) = VRoll (eval st e)
 eval st (TSumL e) = VSumL (eval st e)
 eval st (TSumR e) = VSumR (eval st e)
-eval st (TApp _ _) = VUndefined
+eval st (TOp _) = error "undefined"
 
 --
 -- Term decrease matrix construction algorithm
 --
 
-pattern_to_term :: Pattern v -> Term v
-pattern_to_term (PVar x) = TVar x
-pattern_to_term PUnit = TUnit
-pattern_to_term (PPair p0 p1) =
-  TPair (pattern_to_term p0) (pattern_to_term p1)
-pattern_to_term (PNatLit n) = TNatLit n
-pattern_to_term (PBoolLit b) = TBoolLit b
-pattern_to_term (PSumL p) = TSumL $ pattern_to_term p
-pattern_to_term (PSumR p) = TSumR $ pattern_to_term p
-pattern_to_term (PRoll p) = TRoll $ pattern_to_term p
+patternToTerm :: Pattern v -> Term v
+patternToTerm (PVar x) = TVar x
+patternToTerm PUnit = TUnit
+patternToTerm (PPair p0 p1) =
+  TPair (patternToTerm p0) (patternToTerm p1)
+patternToTerm (PNatLit n) = TNatLit n
+patternToTerm (PBoolLit b) = TBoolLit b
+patternToTerm (PSumL p) = TSumL $ patternToTerm p
+patternToTerm (PSumR p) = TSumR $ patternToTerm p
+patternToTerm (PRoll p) = TRoll $ patternToTerm p
 
-term_to_callterms :: Term v -> [(v, Term v)]
-term_to_callterms = snd . term_to_callterms_aux
+termToCallterms :: Term v -> [(v, Term v)]
+termToCallterms = snd . termToCalltermsAux
   where
-    term_to_callterms_aux :: Term v -> (Term v, [(v, Term v)])
-    term_to_callterms_aux a@(TVar x)   = (a, [])
-    term_to_callterms_aux a@TUnit      = (a, [])
-    term_to_callterms_aux a@TNatLit{}  = (a, [])
-    term_to_callterms_aux a@TBoolLit{} = (a, [])
-    term_to_callterms_aux (TPair t0 t1) =
-      let (a0, a0s) = term_to_callterms_aux t0
-          (a1, a1s) = term_to_callterms_aux t1
+    termToCalltermsAux :: Term v -> (Term v, [(v, Term v)])
+    termToCalltermsAux a@(TVar x)   = (a, [])
+    termToCalltermsAux a@TUnit      = (a, [])
+    termToCalltermsAux a@TNatLit{}  = (a, [])
+    termToCalltermsAux a@TBoolLit{} = (a, [])
+    termToCalltermsAux (TPair t0 t1) =
+      let (a0, a0s) = termToCalltermsAux t0
+          (a1, a1s) = termToCalltermsAux t1
       in (TPair a0 a1, a0s ++ a1s)
-    term_to_callterms_aux (TSumL t) = first TSumL $ term_to_callterms_aux t
-    term_to_callterms_aux (TSumR t) = first TSumR $ term_to_callterms_aux t
-    term_to_callterms_aux (TRoll t) = first TRoll $ term_to_callterms_aux t
-    term_to_callterms_aux (TApp (TVar f) t) =
-      (TUnit, uncurry (:) $ first (f,) $ term_to_callterms_aux t)
-    term_to_callterms_aux (TApp t0 t1) =
-      let (_, as) = term_to_callterms_aux t0
-          (_, bs) = term_to_callterms_aux t1
+    termToCalltermsAux (TSumL t) = first TSumL $ termToCalltermsAux t
+    termToCalltermsAux (TSumR t) = first TSumR $ termToCalltermsAux t
+    termToCalltermsAux (TRoll t) = first TRoll $ termToCalltermsAux t
+    termToCalltermsAux (TApp (TVar f) t) =
+      (TUnit, uncurry (:) $ first (f,) $ termToCalltermsAux t)
+    termToCalltermsAux (TApp t0 t1) =
+      let (_, as) = termToCalltermsAux t0
+          (_, bs) = termToCalltermsAux t1
       in (TUnit, as ++ bs)
     -- TODO: in the TApp cases, the value is not actually TUnit, though it might
     --       be fine.
+    termToCalltermsAux (TOp v) = error "undefined"
+    termToCalltermsAux (TIf tc tt tf) = error "undefined"
 
 data MeasureStep =
   MNat |
@@ -123,39 +127,42 @@ data MeasureStep =
 
 type Measure = ([MeasureStep], [MeasureStep])
 
-measure_recursive :: Eq v => v -> Term v -> [[MeasureStep]]
-measure_recursive x t = measure_recursive_aux [] x t
+measureRecursive :: Eq v => v -> Term v -> [[MeasureStep]]
+measureRecursive x t = measureRecursiveAux [] x t
   where
-    measure_recursive_aux :: Eq v => [MeasureStep] -> v -> Term v -> [[MeasureStep]]
-    measure_recursive_aux m x (TVar y) = (if x == y then [reverse m] else [])
-    measure_recursive_aux m x TUnit = []
-    measure_recursive_aux m x (TBoolLit b0) = []
-    measure_recursive_aux m x (TNatLit n0) = []
-    measure_recursive_aux m x (TPair a b) =
-      measure_recursive_aux (MPairL:m) x a ++ measure_recursive_aux (MPairR:m) x b
-    measure_recursive_aux m x (TSumL a) = measure_recursive_aux (MSumL:m) x a
-    measure_recursive_aux m x (TSumR a) = measure_recursive_aux (MSumR:m) x a
-    measure_recursive_aux m x (TRoll a) = measure_recursive_aux (MRoll:m) x a
+    measureRecursiveAux :: Eq v => [MeasureStep] -> v -> Term v -> [[MeasureStep]]
+    measureRecursiveAux m x (TVar y) = [reverse m | x == y]
+    measureRecursiveAux m x TUnit = []
+    measureRecursiveAux m x (TBoolLit b0) = []
+    measureRecursiveAux m x (TNatLit n0) = []
+    measureRecursiveAux m x (TPair a b) =
+      measureRecursiveAux (MPairL:m) x a ++ measureRecursiveAux (MPairR:m) x b
+    measureRecursiveAux m x (TSumL a) = measureRecursiveAux (MSumL:m) x a
+    measureRecursiveAux m x (TSumR a) = measureRecursiveAux (MSumR:m) x a
+    measureRecursiveAux m x (TRoll a) = measureRecursiveAux (MRoll:m) x a
+    measureRecursiveAux m x (TOp v) = error "undefined"
+    measureRecursiveAux m x (TIf tc tt tf) = error "undefined"
+    measureRecursiveAux m x (TApp a b) = error "undefined"
 
-make_measures :: Eq v => Term v -> Term v -> [Measure]
-make_measures = make_measures_aux []
+makeMeasures :: Eq v => Term v -> Term v -> [Measure]
+makeMeasures = makeMeasuresAux []
   where
-    make_measures_aux :: Eq v => [MeasureStep] -> Term v -> Term v -> [Measure]
-    make_measures_aux m t (TVar x) = map (reverse m,) $ measure_recursive x t
-    make_measures_aux m (TVar x) t = map (reverse m,) $ measure_recursive x t
-    make_measures_aux _ TUnit TUnit = []
-    make_measures_aux _ (TBoolLit b0) (TBoolLit b1) = []
-    make_measures_aux _ (TNatLit n0) (TNatLit n1) = []
-    make_measures_aux m (TPair a0 a1) (TPair b0 b1) =
-      make_measures_aux (MPairL:m) a0 b0 ++ make_measures_aux (MPairR:m) a1 b1
-    make_measures_aux m (TSumL a) (TSumL b) = make_measures_aux (MSumL:m) a b
-    make_measures_aux m (TSumR a) (TSumR b) = make_measures_aux (MSumR:m) a b
-    make_measures_aux m (TRoll a) (TRoll b) = make_measures_aux (MRoll:m) a b
+    makeMeasuresAux :: Eq v => [MeasureStep] -> Term v -> Term v -> [Measure]
+    makeMeasuresAux m t (TVar x) = map (reverse m,) $ measureRecursive x t
+    makeMeasuresAux m (TVar x) t = map (reverse m,) $ measureRecursive x t
+    makeMeasuresAux _ TUnit TUnit = []
+    makeMeasuresAux _ (TBoolLit b0) (TBoolLit b1) = []
+    makeMeasuresAux _ (TNatLit n0) (TNatLit n1) = []
+    makeMeasuresAux m (TPair a0 a1) (TPair b0 b1) =
+      makeMeasuresAux (MPairL:m) a0 b0 ++ makeMeasuresAux (MPairR:m) a1 b1
+    makeMeasuresAux m (TSumL a) (TSumL b) = makeMeasuresAux (MSumL:m) a b
+    makeMeasuresAux m (TSumR a) (TSumR b) = makeMeasuresAux (MSumR:m) a b
+    makeMeasuresAux m (TRoll a) (TRoll b) = makeMeasuresAux (MRoll:m) a b
     -- different sum conflict
-    make_measures_aux m (TSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
-    make_measures_aux m (TSumR a) (TSumL b) = [(reverse (MLLtR:m), [])]
+    makeMeasuresAux m (TSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
+    makeMeasuresAux m (TSumR a) (TSumL b) = [(reverse (MLLtR:m), [])]
     -- conflict case
-    make_measures_aux m _ _ = []
+    makeMeasuresAux m _ _ = []
 
 tryfoldl :: (b -> a -> Maybe b) -> b -> [a] -> (b, [a])
 tryfoldl f b [] = (b, [])
@@ -177,14 +184,14 @@ iterateFixp f a =
   let a' = f a
    in a' `seq` (if a == a' then a else iterateFixp f a')
 
-run_measure :: (Show v, Eq v) => Measure -> Term v -> (Int, Maybe (Measure, Term v))
-run_measure (base, rpath) tinit =
+runMeasure :: (Show v, Eq v) => Measure -> Term v -> (Int, Maybe (Measure, Term v))
+runMeasure (base, rpath) tinit =
   let (k, mmt) = iterateFixp
                     (\(k, mmt) ->
                       case mmt of
                         Nothing -> (k, mmt)
                         Just (m, t) ->
-                          let ((j, mt'), m') = run_measure_steps m t
+                          let ((j, mt'), m') = runMeasureSteps m t
                            in if null m'
                                 then (k+j, (rpath,) <$> mt')
                               else if m == m'
@@ -193,32 +200,32 @@ run_measure (base, rpath) tinit =
                     (0, Just (base,  tinit))
    in (k, first (,rpath) <$> mmt)
   where
-    run_measure_steps :: [MeasureStep] -> Term v -> ((Int, Maybe (Term v)), [MeasureStep])
-    run_measure_steps msteps t =
+    runMeasureSteps :: [MeasureStep] -> Term v -> ((Int, Maybe (Term v)), [MeasureStep])
+    runMeasureSteps msteps t =
       tryfoldl'
         (\(k,mt) mstep ->
           do
             t <- mt
-            (j, mt') <- run_measure_step mstep t
+            (j, mt') <- runMeasureStep mstep t
             return (k+j, mt'))
         (0, Just t)
         msteps
 
-    run_measure_step :: MeasureStep -> Term v -> Maybe (Int, Maybe (Term v))
-    run_measure_step MPairL (TPair a _) = Just (0, Just a)
-    run_measure_step MPairR (TPair _ b) = Just (0, Just b)
-    run_measure_step MSumL  (TSumL a) = Just (0, Just a)
-    run_measure_step MSumR  (TSumR a) = Just (0, Just a)
-    run_measure_step MRoll  (TRoll a) = Just (1, Just a)
-    run_measure_step MNat   (TNatLit k) = Just (0, Nothing)
-    run_measure_step MBool  (TBoolLit k) = Just (0, Nothing)
-    run_measure_step MSumR  TSumL{} = Just (0, Nothing)
-    run_measure_step MSumL  TSumR{} = Just (0, Nothing)
-    run_measure_step MLLtR  TSumL{} = Just (0, Nothing)
-    run_measure_step MRLtL  TSumR{} = Just (0, Nothing)
-    run_measure_step MLLtR  TSumR{} = Just (1, Nothing)
-    run_measure_step MRLtL  TSumL{} = Just (1, Nothing)
-    run_measure_step _ _ = Nothing
+    runMeasureStep :: MeasureStep -> Term v -> Maybe (Int, Maybe (Term v))
+    runMeasureStep MPairL (TPair a _) = Just (0, Just a)
+    runMeasureStep MPairR (TPair _ b) = Just (0, Just b)
+    runMeasureStep MSumL  (TSumL a) = Just (0, Just a)
+    runMeasureStep MSumR  (TSumR a) = Just (0, Just a)
+    runMeasureStep MRoll  (TRoll a) = Just (1, Just a)
+    runMeasureStep MNat   (TNatLit k) = Just (0, Nothing)
+    runMeasureStep MBool  (TBoolLit k) = Just (0, Nothing)
+    runMeasureStep MSumR  TSumL{} = Just (0, Nothing)
+    runMeasureStep MSumL  TSumR{} = Just (0, Nothing)
+    runMeasureStep MLLtR  TSumL{} = Just (0, Nothing)
+    runMeasureStep MRLtL  TSumR{} = Just (0, Nothing)
+    runMeasureStep MLLtR  TSumR{} = Just (1, Nothing)
+    runMeasureStep MRLtL  TSumL{} = Just (1, Nothing)
+    runMeasureStep _ _ = Nothing
 
 data Val = Na | Le | Leq
   deriving (Show, Eq)
@@ -233,19 +240,19 @@ matrixify name fundef = matrix
       fundef
       |> concatMap
         (\(p,t) ->
-          let argterm = pattern_to_term p 
+          let argterm = patternToTerm p 
               callterms = mapMaybe
                             (\(fn, t) -> if fn == name then Just t else Nothing)
-                            (term_to_callterms t)
+                            (termToCallterms t)
           in map (argterm,) callterms)
-    measures = nub . concatMap (uncurry make_measures) $ argpairs
+    measures = nub . concatMap (uncurry makeMeasures) $ argpairs
     reduced =
       map
         (\m ->
           (m, map
             (\(a, b) ->
-              let (ka, mmta) = run_measure m a
-                  (kb, mmtb) = run_measure m b
+              let (ka, mmta) = runMeasure m a
+                  (kb, mmtb) = runMeasure m b
               in (if mmta == mmtb || (not (null mmta) && null mmtb)
                     -- Case 1: kb + |x| - (ka + |x|) == kb - ka
                     -- Case 2: kb - (ka + |x|) <= kb - ka
@@ -253,4 +260,4 @@ matrixify name fundef = matrix
                   else Sym Na))
           argpairs))
         measures
-    matrix = map snd {- . traceShowId -} $ reduced
+    matrix = map snd {- . traceShowId $ -} reduced
