@@ -144,23 +144,21 @@ measureRecursive x t = measureRecursiveAux [] x t
     measureRecursiveAux m x (TIf tc tt tf) = error "undefined"
     measureRecursiveAux m x (TApp a b) = error "undefined"
 
-makeMeasures :: Eq v => Term v -> Term v -> [Measure]
+makeMeasures :: Eq v => Pattern v -> Term v -> [Measure]
 makeMeasures = makeMeasuresAux []
   where
-    makeMeasuresAux :: Eq v => [MeasureStep] -> Term v -> Term v -> [Measure]
-    makeMeasuresAux m t (TVar x) = map (reverse m,) $ measureRecursive x t
-    makeMeasuresAux m (TVar x) t = map (reverse m,) $ measureRecursive x t
-    makeMeasuresAux _ TUnit TUnit = []
-    makeMeasuresAux _ (TBoolLit b0) (TBoolLit b1) = []
-    makeMeasuresAux _ (TNatLit n0) (TNatLit n1) = []
-    makeMeasuresAux m (TPair a0 a1) (TPair b0 b1) =
+    makeMeasuresAux :: Eq v => [MeasureStep] -> Pattern v -> Term v -> [Measure]
+    makeMeasuresAux m p (TVar x) = map (reverse m,) $ measureRecursive x (patternToTerm p)
+    makeMeasuresAux m (PVar x) t = map (reverse m,) $ measureRecursive x t
+    makeMeasuresAux _ PUnit TUnit = []
+    makeMeasuresAux _ (PBoolLit b0) (TBoolLit b1) = []
+    makeMeasuresAux _ (PNatLit n0) (TNatLit n1) = []
+    makeMeasuresAux m (PPair a0 a1) (TPair b0 b1) =
       makeMeasuresAux (MPairL:m) a0 b0 ++ makeMeasuresAux (MPairR:m) a1 b1
-    makeMeasuresAux m (TSumL a) (TSumL b) = makeMeasuresAux (MSumL:m) a b
-    makeMeasuresAux m (TSumR a) (TSumR b) = makeMeasuresAux (MSumR:m) a b
-    makeMeasuresAux m (TRoll a) (TRoll b) = makeMeasuresAux (MRoll:m) a b
+    makeMeasuresAux m (PRoll a) (TRoll b) = makeMeasuresAux (MRoll:m) a b
     -- different sum conflict
-    makeMeasuresAux m (TSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
-    makeMeasuresAux m (TSumR a) (TSumL b) = [(reverse (MLLtR:m), [])]
+    makeMeasuresAux m (PSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
+    makeMeasuresAux m (PSumR a) (TSumL b) = [(reverse (MLLtR:m), [])]
     -- conflict case
     makeMeasuresAux m _ _ = []
 
@@ -239,19 +237,18 @@ matrixify name fundef = matrix
     argpairs =
       fundef
       |> concatMap
-        (\(p,t) ->
-          let argterm = patternToTerm p 
-              callterms = mapMaybe
+        (\(argp,t) ->
+          let callterms = mapMaybe
                             (\(fn, t) -> if fn == name then Just t else Nothing)
                             (termToCallterms t)
-          in map (argterm,) callterms)
+          in map (argp,) callterms)
     measures = nub . concatMap (uncurry makeMeasures) $ argpairs
     reduced =
       map
         (\m ->
           (m, map
             (\(a, b) ->
-              let (ka, mmta) = runMeasure m a
+              let (ka, mmta) = runMeasure m (patternToTerm a)
                   (kb, mmtb) = runMeasure m b
               in (if mmta == mmtb || (not (null mmta) && null mmtb)
                     -- Case 1: kb + |x| - (ka + |x|) == kb - ka
