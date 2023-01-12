@@ -84,6 +84,14 @@ doUntil p stepfn a =
         a' <- stepfn a
         doUntil p stepfn a'
 
+{-
+  There are three steps this program can perform:
+    1. (PhDatProgText) Transform program text into a Prog (a collection of
+       named function definitions).
+    2. (PhDatProgram) Transform a Prog into an Entry matrix (a matrix where
+       the rows correspond to recursive calls, and the columns  to measures).
+    3. (PhDatMatrix) Solve the termination problem specified by an entry matrix.
+-}
 phaseStep :: PhaseData -> IO PhaseData
 phaseStep (PhDatProgText progText) =
   case parse_program progText of

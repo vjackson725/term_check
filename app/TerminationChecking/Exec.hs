@@ -249,6 +249,22 @@ theNum (Num x) = x
 theSym :: Entry -> Val
 theSym (Sym x) = x
 
+{-
+  Turns a function definition (along with the name of the function) into an
+  entry matrix. (An entry matrix is a matrix of `Entry`s where the rows
+  correspond to recursive calls, and the columns to measures.)
+
+  1. Firstly, argument-pairs are found by recursion. Argument pairs are the
+     term passed to a case in the function, paired with the term passed to
+     a recursive call to that same function, from that case.
+  2. Measures are generated according to the `makeMeasures` function,
+     by inspection of the argpairs.
+  3. Then, the measures are run on the original-recursive term pairs, to find
+     the *structural* decrease between these terms.
+     (This reduction is done as a separate step so we have a representation of
+      the measure we can return later, although we don't do so at the moment.)
+  4. These reduced values are the entries in the output entry matrix.
+-}
 matrixify :: (Show v, Eq v) => v -> FunDef v -> [[Entry]]
 matrixify name fundef = matrix
   where
