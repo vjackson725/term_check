@@ -3,6 +3,10 @@
 module TerminationChecking.Exec
   (
     Entry(..),
+    isNum,
+    isSym,
+    theNum,
+    theSym,
     Val(..),
     matrixify,
   )
@@ -230,6 +234,20 @@ data Val = Na | Le | Leq
 
 data Entry = Num Double | Sym Val
   deriving (Show, Eq)
+
+isNum :: Entry -> Bool
+isNum Num{} = True
+isNum _ = False
+
+isSym :: Entry -> Bool
+isSym Sym{} = True
+isSym _ = False
+
+theNum :: Entry -> Double
+theNum (Num x) = x
+
+theSym :: Entry -> Val
+theSym (Sym x) = x
 
 matrixify :: (Show v, Eq v) => v -> FunDef v -> [[Entry]]
 matrixify name fundef = matrix
