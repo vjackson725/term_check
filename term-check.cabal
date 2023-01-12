@@ -34,7 +34,7 @@ executable term-check
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
-    build-depends:    base ^>= 4.14.1.0
+    build-depends:    base ^>= 4.16.0
                     , hmatrix >= 0.20
                     , hmatrix-glpk >= 0.4.0
                     , containers >= 0.6.0
