@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase, ScopedTypeVariables, TupleSections #-}
 
+import Control.Monad (void)
 import Data.Foldable
 import Data.List
 import Options.Applicative
@@ -13,10 +14,8 @@ import TerminationChecking.Lang
 import TerminationChecking.Parser (Prog, parse_program)
 import TerminationChecking.Solver --(TermResult, solve_mat)
 
-import qualified Data.Map as M
-
-pretty_matrix :: [[Entry]] -> String
-pretty_matrix m =
+prettyMatrix :: [[Entry]] -> String
+prettyMatrix m =
   let lvl2 :: [[String]] = map (map (\case { Sym s -> "?"; Num n -> show n })) m
       lvl1 :: [String] =  map (('[' :) . foldr (++) "]" . intersperse ", ") lvl2
       lvl0 :: String =  ('[' :) . foldr (++) "]" . intersperse ", " $ lvl1
@@ -49,26 +48,26 @@ isPhase _ _ = False
 
 type Command = (String, Phase, Phase)
 
-make_matrix_cmd :: Parser Command
-make_matrix_cmd =
+makeMatrixCmd :: Parser Command
+makeMatrixCmd =
   (, PhProgText, PhMatrix) <$> argument str (metavar "FILENM")
 
-matrix_check_cmd :: Parser Command
-matrix_check_cmd =
+matrixCheckCmd :: Parser Command
+matrixCheckCmd =
   (, PhMatrix, PhSoln) <$> argument str (metavar "MATRIX")
 
-program_check_cmd :: Parser Command
-program_check_cmd =
+programCheckCmd :: Parser Command
+programCheckCmd =
   (, PhProgText, PhSoln) <$> argument str (metavar "FILENM")
 
-termcheck_argparser :: ParserInfo Command
-termcheck_argparser =
+termcheckArgparser :: ParserInfo Command
+termcheckArgparser =
   info
     (subparser
-      (  command "makematrix" (info make_matrix_cmd (progDesc "Make a matrix from a program"))
-      <> command "matrixcheck" (info matrix_check_cmd (progDesc "Check a matrix is solvable"))
-      <> command "programcheck" (info program_check_cmd (progDesc "Check a program terminates"))
-      <> command "solve" (info program_check_cmd (progDesc "Check a program terminates"))
+      (  command "makematrix" (info makeMatrixCmd (progDesc "Make a matrix from a program"))
+      <> command "matrixcheck" (info matrixCheckCmd (progDesc "Check a matrix is solvable"))
+      <> command "programcheck" (info programCheckCmd (progDesc "Check a program terminates"))
+      <> command "solve" (info programCheckCmd (progDesc "Check a program terminates"))
       ) <**> helper)
     (progDesc "Linear-Lexicographic program termination checker.")
 
@@ -89,19 +88,19 @@ phaseStep :: PhaseData -> IO PhaseData
 phaseStep (PhDatProgText progText) =
   case parse_program progText of
     Left err ->
-      (hPutStr stderr $ "ERROR: " ++ err ++ "\n") >>
+      hPutStr stderr ("ERROR: " ++ err ++ "\n") >>
       exitWith (ExitFailure 1)
     Right prog -> return . PhDatProgram $ prog
 phaseStep (PhDatProgram prog) =
   return . PhDatMatrix $
-    M.mapWithKey (\k v -> matrixify k v) prog
+    M.mapWithKey matrixify prog
 phaseStep (PhDatMatrix mat) =
   return . PhDatSoln $ M.map solve_mat mat
 
 main :: IO ()
 main =
   do
-    (filenm, startPhase, endPhase) <- customExecParser p termcheck_argparser
+    (filenm, startPhase, endPhase) <- customExecParser p termcheckArgparser
     -- Read file
     filetext <- readFile filenm
     -- Create start phase data
@@ -115,7 +114,7 @@ main =
           -- TODO: filetext to matrix
           error "ERROR: matrix phase start not implemented yet\n"
         PhSoln     ->
-          (hPutStr stderr $ "ERROR: can't start in solution phase\n") >>
+          hPutStr stderr "ERROR: can't start in solution phase\n" >>
           exitWith (ExitFailure 1)
     -- Run program
     result <- doUntil (isPhase endPhase) phaseStep phin
@@ -123,17 +122,17 @@ main =
     _ <-
       case result of
         PhDatProgText progtext ->
-          (hPutStr stderr $ "ERROR: can't end in read file phase\n") >>
+          hPutStr stderr "ERROR: can't end in read file phase\n" >>
           exitWith (ExitFailure 1)
         PhDatProgram prog ->
-          putStrLn $ show prog
+          print prog
         PhDatMatrix mats ->
           traverse_
             (\(fnnm, mat) ->
-              putStrLn (fnnm ++ ": " ++ pretty_matrix mat) >> return ())
+              void $ putStrLn (fnnm ++ ": " ++ prettyMatrix mat))
             (M.toAscList mats)
         PhDatSoln res ->
-          putStrLn . show $ res
+          print res
     return ()
   where
     p = prefs showHelpOnError
