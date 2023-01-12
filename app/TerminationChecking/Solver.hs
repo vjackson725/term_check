@@ -1,5 +1,5 @@
 module TerminationChecking.Solver
-  (TermResult, solve_mat)
+  (TermResult, solveMat)
 where
 
 
@@ -35,21 +35,20 @@ as 1 vector x ++ y ++ z, and we just work with the appropriate parts of that big
 
 type TermResult = Bool
 
-solve_mat :: [[Entry]] -> TermResult
-solve_mat termmat = termmat == [] || termCheck termmat
+solveMat :: [[Entry]] -> TermResult
+solveMat termmat = null termmat || termCheck termmat
 
 
 type Tmatrix = [[Entry]]
 
---zero :: [Int] -> [Int]
-zero [] = []
-zero (x:xs) = 0 : (zero xs)
+zero :: [Int] -> [Int]
+zero = map (const 0)
 
 vecCheck :: [Entry] -> Val
-vecCheck vec | vec == [] = Na
+vecCheck vec | null vec = Na
              | otherwise = go True vec
     where
-        go v [] | v == True           = Le
+        go v [] | v                   = Le
                 | otherwise           = Leq
         go v ((Num y):ys) | y > 0     = Na
                           | y == 0    = go False ys
@@ -92,12 +91,12 @@ lexic' a | b == a = (False, [])
 toLists' a = toLists (tr a :: Matrix Double)
 fromLists' a = tr (fromLists a) :: Matrix Double
 
-addId a = a ++ (toLists' (ident (length a)))
+addId a = a ++ toLists' (ident (length a))
 
 
 
 bindLists [] _ _ = []
-bindLists (b:bs) n lenx = ((idRow 0) :&: (0, 1)) : (b :==: 0) : (bindLists bs (n+1) lenx)
+bindLists (b:bs) n lenx = (idRow 0 :&: (0, 1)) : (b :==: 0) : bindLists bs (n+1) lenx
     where
         m = length b
 
@@ -106,13 +105,13 @@ bindLists (b:bs) n lenx = ((idRow 0) :&: (0, 1)) : (b :==: 0) : (bindLists bs (n
                 | otherwise       = 0:idRow (k+1)
 
 split :: [a] -> ([a], [a])
-split myList = splitAt (((length myList) + 1) `div` 2) myList
+split myList = splitAt ((length myList + 1) `div` 2) myList
 
-listAdd (x:xs) (y:ys) = (x+y) : (listAdd xs ys)
+listAdd (x:xs) (y:ys) = (x+y) : listAdd xs ys
 listAdd [] [] = []
 listAdd _ _ = error "length mismatch"
 
-pointwiseConc (x:xs) (y:ys) = (x++y) : (pointwiseConc xs ys)
+pointwiseConc (x:xs) (y:ys) = (x++y) : pointwiseConc xs ys
 pointwiseConc [] [] = []
 pointwiseConc _ _ = error "length mismatch"
 
@@ -122,7 +121,7 @@ lin a = let (nums, rest) = extract a [] []
             rows = toLists $ tr (fromLists nums) :: [[Double]]
 
             -- Maximise sum y
-            prob = Maximize $ (sumy nums rows)
+            prob = Maximize $ sumy nums rows
 
             idMat = toLists $ ident (length rows)
 
@@ -132,7 +131,7 @@ lin a = let (nums, rest) = extract a [] []
             Optimal (b, bs) = simplex prob constr []
 
             x = take (length nums) bs
-            x' = toEnt (toList ((fromLists' nums) #> (vector x)))
+            x' = toEnt (toList (fromLists' nums #> vector x))
           in (x':rest)
   where
     isInt []           = True
@@ -140,28 +139,28 @@ lin a = let (nums, rest) = extract a [] []
     isInt ((Sym x):xs) = False
 
     toInt' [] = []
-    toInt' ((Num x):xs) = x:(toInt' xs)
+    toInt' ((Num x):xs) = x : toInt' xs
 
     toEnt [] = []
-    toEnt (x:xs) = (Num x):(toEnt xs)
+    toEnt (x:xs) = Num x : toEnt xs
 
     extract [] num sym = (num, sym)
-    extract (x:xs) num sym | isInt x   = extract xs ((toInt' x):num) sym
+    extract (x:xs) num sym | isInt x   = extract xs (toInt' x : num) sym
                            | otherwise = extract xs num (x:sym)
 
-    sumy (x:xs) ys = 0:(sumy xs ys)
+    sumy (x:xs) ys = 0 : sumy xs ys
     sumy [] ys     = go ys 0
         where
             go [] 0     = []
-            go [] n     = 0:(go [] (n-1))
-            go (k:ks) n = 1:(go ks (n+1))
+            go [] n     = 0 : go [] (n-1)
+            go (k:ks) n = 1 : go ks (n+1)
 
 
 
 lin' a = let (b:bs) = lin a
          in case () of _
-                        | reduced b -> (True, (b:bs))
-                        | otherwise -> (False, (b:bs))
+                        | reduced b -> (True, b:bs)
+                        | otherwise -> (False, b:bs)
 
 
 -- Checks if a function with associated matrix `a` terminates
@@ -175,7 +174,7 @@ termCheck a =
       else
         let (v', a'') = lexic' a'
         in
-          if a'' == []
+          if null a''
           then
             v'
           else

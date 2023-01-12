@@ -95,7 +95,7 @@ phaseStep (PhDatProgram prog) =
   return . PhDatMatrix $
     M.mapWithKey matrixify prog
 phaseStep (PhDatMatrix mat) =
-  return . PhDatSoln $ M.map solve_mat mat
+  return . PhDatSoln $ M.map solveMat mat
 
 main :: IO ()
 main =
