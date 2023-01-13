@@ -166,68 +166,55 @@ makeMeasures = makeMeasuresAux []
     -- conflict case
     makeMeasuresAux m _ _ = []
 
-tryfoldl :: (b -> a -> Maybe b) -> b -> [a] -> (b, [a])
-tryfoldl f b [] = (b, [])
-tryfoldl f b as@(a:as') =
-  case f b a of
-    Nothing -> (b, as)
-    Just b' -> tryfoldl f b' as'
+{-
+  This function takes a measure and a term, and runs the measure on the term to
+  find the structural size of the term.
 
-tryfoldl' :: (b -> a -> Maybe b) -> b -> [a] -> (b, [a])
-tryfoldl' f b [] = (b, [])
-tryfoldl' f b as@(a:as') =
-  let mb' = f b a
-   in mb' `seq` (case mb' of
-                  Nothing -> (b, as)
-                  Just b' -> tryfoldl' f b' as')
+  There are two components to a measure, the base, and the recursive part.
+  The base is run till it is exhausted or fails to match, and then the recursive
+  part is unfolded into the base and execution continues.
 
-iterateFixp :: Eq a => (a -> a) -> a -> a
-iterateFixp f a =
-  let a' = f a
-   in a' `seq` (if a == a' then a else iterateFixp f a')
+  Execution of a measure finishes when either a measure is applied to something
+  it does not match, or the measure reaches a base case (MNat, MBool, MLLtR, MRLtL).
+
+  The result can be a suspended symbolic value, as the measure may be reduced to
+  a measure applied to a variable, or to a measure applied to something which
+  it is not a match for.
+-}
+
 
 runMeasure :: (Show v, Eq v) => Measure -> Term v -> (Int, Maybe (Measure, Term v))
-runMeasure (base, rpath) tinit =
-  let (k, mmt) = iterateFixp
-                    (\(k, mmt) ->
-                      case mmt of
-                        Nothing -> (k, mmt)
-                        Just (m, t) ->
-                          let ((j, mt'), m') = runMeasureSteps m t
-                           in if null m'
-                                then (k+j, (rpath,) <$> mt')
-                              else if m == m'
-                                then (k, Just (m, t)) -- ASSERT: j == 0 && mt' == Some t
-                              else (k+j, (m',) <$> mt'))
-                    (0, Just (base,  tinit))
-   in (k, first (,rpath) <$> mmt)
+runMeasure m t = runMeasureAux 0 m t
   where
-    runMeasureSteps :: [MeasureStep] -> Term v -> ((Int, Maybe (Term v)), [MeasureStep])
-    runMeasureSteps msteps t =
-      tryfoldl'
-        (\(k,mt) mstep ->
-          do
-            t <- mt
-            (j, mt') <- runMeasureStep mstep t
-            return (k+j, mt'))
-        (0, Just t)
-        msteps
-
-    runMeasureStep :: MeasureStep -> Term v -> Maybe (Int, Maybe (Term v))
-    runMeasureStep MPairL (TPair a _) = Just (0, Just a)
-    runMeasureStep MPairR (TPair _ b) = Just (0, Just b)
-    runMeasureStep MSumL  (TSumL a) = Just (0, Just a)
-    runMeasureStep MSumR  (TSumR a) = Just (0, Just a)
-    runMeasureStep MRoll  (TRoll a) = Just (1, Just a)
-    runMeasureStep MNat   (TNatLit k) = Just (0, Nothing)
-    runMeasureStep MBool  (TBoolLit k) = Just (0, Nothing)
-    runMeasureStep MSumR  TSumL{} = Just (0, Nothing)
-    runMeasureStep MSumL  TSumR{} = Just (0, Nothing)
-    runMeasureStep MLLtR  TSumL{} = Just (0, Nothing)
-    runMeasureStep MRLtL  TSumR{} = Just (0, Nothing)
-    runMeasureStep MLLtR  TSumR{} = Just (1, Nothing)
-    runMeasureStep MRLtL  TSumL{} = Just (1, Nothing)
-    runMeasureStep _ _ = Nothing
+    runMeasureAux :: (Show v, Eq v) => Int -> Measure -> Term v -> (Int, Maybe (Measure, Term v))
+    runMeasureAux k (MPairL : mb, mr) (TPair ta _) = runMeasureAux k (mb, mr) ta
+    runMeasureAux k (MPairR : mb, mr) (TPair _ tb) = runMeasureAux k (mb, mr) tb
+    runMeasureAux k (MSumL  : mb, mr) (TSumL t) = runMeasureAux k (mb, mr) t
+    runMeasureAux k (MSumR  : mb, mr) (TSumR t) = runMeasureAux k (mb, mr) t
+    runMeasureAux k (MRoll  : mb, mr) (TRoll t) = runMeasureAux (k+1) (mb, mr) t
+    runMeasureAux k (MNat   : mb, mr) (TNatLit m)  = (k, Nothing)
+    runMeasureAux k (MBool  : mb, mr) (TBoolLit b) = (k, Nothing)
+    runMeasureAux k (MSumR  : mb, mr) (TSumL t) = runMeasureAux k (mb, mr) t
+    runMeasureAux k (MSumL  : mb, mr) (TSumR t) = runMeasureAux k (mb, mr) t
+    runMeasureAux k (MLLtR  : mb, mr) TSumL{} = (k, Nothing)
+    runMeasureAux k (MRLtL  : mb, mr) TSumR{} = (k, Nothing)
+    runMeasureAux k (MLLtR  : mb, mr) TSumR{} = (k+1, Nothing)
+    runMeasureAux k (MRLtL  : mb, mr) TSumL{} = (k+1, Nothing)
+    runMeasureAux k ([], mr@(MPairL : mr')) (TPair ta _) = runMeasureAux k (mr', mr) ta
+    runMeasureAux k ([], mr@(MPairR : mr')) (TPair _ tb) = runMeasureAux k (mr', mr) tb
+    runMeasureAux k ([], mr@(MSumL  : mr')) (TSumL t) = runMeasureAux k (mr', mr) t
+    runMeasureAux k ([], mr@(MSumR  : mr')) (TSumR t) = runMeasureAux k (mr', mr) t
+    runMeasureAux k ([], mr@(MRoll  : mr')) (TRoll t) = runMeasureAux (k+1) (mr', mr) t
+    runMeasureAux k ([], mr@(MNat   : mr')) (TNatLit m)  = (k, Nothing)
+    runMeasureAux k ([], mr@(MBool  : mr')) (TBoolLit b) = (k, Nothing)
+    runMeasureAux k ([], mr@(MSumR  : mr')) (TSumL t) = runMeasureAux k (mr', mr) t
+    runMeasureAux k ([], mr@(MSumL  : mr')) (TSumR t) = runMeasureAux k (mr', mr) t
+    runMeasureAux k ([], MLLtR:_) TSumL{} = (k, Nothing)
+    runMeasureAux k ([], MRLtL:_) TSumR{} = (k, Nothing)
+    runMeasureAux k ([], MLLtR:_) TSumR{} = (k+1, Nothing)
+    runMeasureAux k ([], MRLtL:_) TSumL{} = (k+1, Nothing)
+    runMeasureAux k ([], []) _ = error "Bad measure"
+    runMeasureAux k m t = (k, Just (m, t))
 
 data Val = Na | Le | Leq
   deriving (Show, Eq)
@@ -276,7 +263,7 @@ matrixify name fundef = matrix
                             (\(fn, t) -> if fn == name then Just t else Nothing)
                             (termToCallterms t)
           in map (argp,) callterms)
-    measures = nub . concatMap (uncurry makeMeasures) $ argpairs
+    measures = traceShowId $ nub . concatMap (uncurry makeMeasures) $ argpairs
     reduced =
       map
         (\m ->
