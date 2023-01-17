@@ -135,7 +135,7 @@ measureRecursive :: Eq v => v -> Term v -> [[MeasureStep]]
 measureRecursive x t = measureRecursiveAux [] x t
   where
     measureRecursiveAux :: Eq v => [MeasureStep] -> v -> Term v -> [[MeasureStep]]
-    measureRecursiveAux m x (TVar y) = [reverse m | x == y]
+    measureRecursiveAux m x (TVar y) = [reverse m | x == y, not (null m)]
     measureRecursiveAux m x TUnit = []
     measureRecursiveAux m x (TBoolLit b0) = []
     measureRecursiveAux m x (TNatLit n0) = []
@@ -159,6 +159,8 @@ makeMeasures = makeMeasuresAux []
     makeMeasuresAux _ (PNatLit n0) (TNatLit n1) = []
     makeMeasuresAux m (PPair a0 a1) (TPair b0 b1) =
       makeMeasuresAux (MPairL:m) a0 b0 ++ makeMeasuresAux (MPairR:m) a1 b1
+    makeMeasuresAux m (PSumL a) (TSumL b) = makeMeasuresAux (MSumL:m) a b
+    makeMeasuresAux m (PSumR a) (TSumR b) = makeMeasuresAux (MSumR:m) a b
     makeMeasuresAux m (PRoll a) (TRoll b) = makeMeasuresAux (MRoll:m) a b
     -- different sum conflict
     makeMeasuresAux m (PSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
