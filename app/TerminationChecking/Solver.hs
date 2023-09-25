@@ -34,6 +34,8 @@ as 1 vector x ++ y ++ z, and we just work with the appropriate parts of that big
 
 
 type TermResult = Bool
+-- type TermResult = [(Integer, Measure)]
+
 type Tmatrix = [[Entry]]
 
 solveMat :: Tmatrix -> TermResult
