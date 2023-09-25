@@ -138,7 +138,7 @@ measureRecursive x t = measureRecursiveAux [] x t
     measureRecursiveAux m x (TVar y) = [reverse m | x == y, not (null m)]
     measureRecursiveAux m x TUnit = []
     measureRecursiveAux m x (TBoolLit b0) = []
-    measureRecursiveAux m x (TNatLit n0) = []
+    measureRecursiveAux m x (TNatLit n0) = [MNat:m]
     measureRecursiveAux m x (TPair a b) =
       measureRecursiveAux (MPairL:m) x a ++ measureRecursiveAux (MPairR:m) x b
     measureRecursiveAux m x (TSumL a) = measureRecursiveAux (MSumL:m) x a
@@ -185,16 +185,16 @@ makeMeasures = makeMeasuresAux []
 -}
 
 
-runMeasure :: (Show v, Eq v) => Measure -> Term v -> (Int, Maybe (Measure, Term v))
+runMeasure :: (Show v, Eq v) => Measure -> Term v -> (Integer, Maybe (Measure, Term v))
 runMeasure m t = runMeasureAux 0 m t
   where
-    runMeasureAux :: (Show v, Eq v) => Int -> Measure -> Term v -> (Int, Maybe (Measure, Term v))
+    runMeasureAux :: (Show v, Eq v) => Integer -> Measure -> Term v -> (Integer, Maybe (Measure, Term v))
     runMeasureAux k (MPairL : mb, mr) (TPair ta _) = runMeasureAux k (mb, mr) ta
     runMeasureAux k (MPairR : mb, mr) (TPair _ tb) = runMeasureAux k (mb, mr) tb
     runMeasureAux k (MSumL  : mb, mr) (TSumL t) = runMeasureAux k (mb, mr) t
     runMeasureAux k (MSumR  : mb, mr) (TSumR t) = runMeasureAux k (mb, mr) t
     runMeasureAux k (MRoll  : mb, mr) (TRoll t) = runMeasureAux (k+1) (mb, mr) t
-    runMeasureAux k (MNat   : mb, mr) (TNatLit m)  = (k, Nothing)
+    runMeasureAux k (MNat   : mb, mr) (TNatLit m) | m >= 0  = (k + m, Nothing)
     runMeasureAux k (MBool  : mb, mr) (TBoolLit b) = (k, Nothing)
     runMeasureAux k (MSumR  : mb, mr) TSumL{} = (k, Nothing)
     runMeasureAux k (MSumL  : mb, mr) TSumR{} = (k, Nothing)
@@ -208,7 +208,7 @@ runMeasure m t = runMeasureAux 0 m t
     runMeasureAux k ([], mr@(MSumL  : mr')) (TSumL t) = runMeasureAux k (mr', mr) t
     runMeasureAux k ([], mr@(MSumR  : mr')) (TSumR t) = runMeasureAux k (mr', mr) t
     runMeasureAux k ([], mr@(MRoll  : mr')) (TRoll t) = runMeasureAux (k+1) (mr', mr) t
-    runMeasureAux k ([], mr@(MNat   : mr')) (TNatLit m)  = (k, Nothing)
+    runMeasureAux k ([], mr@(MNat   : mr')) (TNatLit m) | 0 <= m = (k + m, Nothing)
     runMeasureAux k ([], mr@(MBool  : mr')) (TBoolLit b) = (k, Nothing)
     runMeasureAux k ([], mr@(MSumR  : mr')) TSumL{} = (k, Nothing)
     runMeasureAux k ([], mr@(MSumL  : mr')) TSumR{} = (k, Nothing)
@@ -277,7 +277,7 @@ matrixify name fundef = matrix
               in (if mmta == mmtb || (not (null mmta) && null mmtb)
                     -- Case 1: kb + |x| - (ka + |x|) == kb - ka
                     -- Case 2: kb - (ka + |x|) <= kb - ka
-                    then Num (toEnum (kb - ka))
+                    then Num (fromInteger (kb - ka))
                   else Sym Na))
           argpairs))
         measures
