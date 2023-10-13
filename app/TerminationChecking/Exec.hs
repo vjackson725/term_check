@@ -144,9 +144,9 @@ measureRecursive x t = measureRecursiveAux [] x t
     measureRecursiveAux m x (TSumL a) = measureRecursiveAux (MSumL:m) x a
     measureRecursiveAux m x (TSumR a) = measureRecursiveAux (MSumR:m) x a
     measureRecursiveAux m x (TRoll a) = measureRecursiveAux (MRoll:m) x a
-    measureRecursiveAux m x (TOp v) = error "undefined"
-    measureRecursiveAux m x (TIf tc tt tf) = error "undefined"
-    measureRecursiveAux m x (TApp a b) = error "undefined"
+    measureRecursiveAux m x (TApp a b) = []
+    measureRecursiveAux m x (TOp v) = error "unimplemented"
+    measureRecursiveAux m x (TIf tc tt tf) = error "unimplemented"
 
 makeMeasures :: Eq v => Pattern v -> Term v -> [Measure]
 makeMeasures = makeMeasuresAux []
