@@ -26,6 +26,7 @@ executable term-check
     other-modules:    TerminationChecking.Examples
                     , TerminationChecking.Exec
                     , TerminationChecking.Lang
+                    , TerminationChecking.Measure
                     , TerminationChecking.Parser
                     , TerminationChecking.Solver
     -- LANGUAGE extensions used by modules in this package.

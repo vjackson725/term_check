@@ -1,5 +1,15 @@
 
-module TerminationChecking.Lang where
+module TerminationChecking.Lang
+  ( (|>)
+  , Term(..)
+  , Pattern(..)
+  , FunDef
+  , patternToTerm
+  , pattern_dup_vars
+  , pattern_match
+  , subst_term
+  )
+where
 
 import qualified Data.Map as M
 import Data.List (nub, find)
@@ -95,3 +105,14 @@ pattern_match _ _ = Nothing
 -}
 tlet :: Eq v => v -> Term v -> Term v -> Term v
 tlet x s t = subst_term [(x,s)] t
+
+patternToTerm :: Pattern v -> Term v
+patternToTerm (PVar x) = TVar x
+patternToTerm PUnit = TUnit
+patternToTerm (PPair p0 p1) =
+  TPair (patternToTerm p0) (patternToTerm p1)
+patternToTerm (PNatLit n) = TNatLit n
+patternToTerm (PBoolLit b) = TBoolLit b
+patternToTerm (PSumL p) = TSumL $ patternToTerm p
+patternToTerm (PSumR p) = TSumR $ patternToTerm p
+patternToTerm (PRoll p) = TRoll $ patternToTerm p
