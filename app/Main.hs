@@ -12,11 +12,11 @@ import qualified Data.Map as M
 import TerminationChecking.Exec
 import TerminationChecking.Lang
 import TerminationChecking.Parser (Prog, parse_program)
-import TerminationChecking.Solver --(TermResult, solve_mat)
+import TerminationChecking.Solver
 
 prettyMatrix :: [[Entry]] -> String
 prettyMatrix m =
-  let lvl2 :: [[String]] = map (map (\case { Sym s -> "?"; Num n -> show n })) m
+  let lvl2 :: [[String]] = map (map (\case { Inf -> "ω"; Num n -> show n })) m
       lvl1 :: [String] =  map (('[' :) . foldr (++) "]" . intersperse ", ") lvl2
       lvl0 :: String =  ('[' :) . foldr (++) "]" . intersperse ", " $ lvl1
     in lvl0

@@ -1,146 +1,181 @@
 module TerminationChecking.Solver
-  (TermResult, solveMat)
+  ( TermResult
+  , solveMat
+  )
 where
 
+import Debug.Trace
 
-import Data.List (splitAt, replicate)
-import Numeric.LinearAlgebra
+import Data.List (splitAt, replicate, sort, partition, transpose)
+import Data.Maybe (mapMaybe)
+import Data.Bifunctor (bimap, second)
+import Numeric.LinearAlgebra (vector, (#>), (<#), toList, toLists, fromList, fromLists, tr, ident)
 import Numeric.LinearProgramming
 import Text.Parsec (parse)
 
 import qualified Data.Map as M
 
-import TerminationChecking.Lang
-import TerminationChecking.Exec (Entry(..), isNum, theNum, Val(..))
+import TerminationChecking.Lang ((|>))
+import TerminationChecking.Measure (Measure)
+import TerminationChecking.Exec (Entry(..), isNum, theNum, isInf)
 import TerminationChecking.Parser (parse_program)
 
+----------
+-- Misc --
+----------
+
+enumerate :: [a] -> [(Int, a)]
+enumerate xs = aux 0 xs
+  where
+    aux _ [] = []
+    aux k (x : xs) = (k, x) : aux (k+1) xs
+
+selectIdxs :: [Int] -> [a] -> [a]
+selectIdxs is xs = selectIdxsAux (sort is) xs 0
+  where
+    selectIdxsAux :: [Int] -> [a] -> Int -> [a]
+    selectIdxsAux _ [] _ = []
+    selectIdxsAux [] _ _ = []
+    selectIdxsAux (i:is) (x:xs) j =
+      if i < j then
+        selectIdxsAux is (x:xs) j
+      else if i == j then
+        x : selectIdxsAux (i:is) xs (j+1)
+      else -- i > j
+        selectIdxsAux (i:is) xs (j+1)
+
+dropIdxs :: [Int] -> [a] -> [a]
+dropIdxs is xs = dropIdxsAux (sort is) xs 0
+  where
+    dropIdxsAux :: [Int] -> [a] -> Int -> [a]
+    dropIdxsAux _ [] _ = []
+    dropIdxsAux [] xs _ = xs
+    dropIdxsAux (i:is) (x:xs) j =
+      if i < j then
+        dropIdxsAux is (x:xs) j
+      else if i == j then
+        dropIdxsAux (i:is) xs (j+1)
+      else -- i > j
+        x : dropIdxsAux (i:is) xs (j+1)
+
+snoc :: [a] -> a -> [a]
+snoc [] y = [y]
+snoc (x:xs) y = x : (snoc xs y)
+
+-----------
+-- Types --
+-----------
+
+-- type TermResult = Bool
+type TermResult = Maybe [[(Double, Int)]]
+
+-- A matrix of numbers, represented as a list of columns
+type NumMatrix = [[Double]]
+
+-- A matrix of entries, represented as a list of columns
+type TMatrix = [[Entry]]
+
+-------------------
+-- Linear Solver --
+-------------------
+
 {-
-Finds a linear combination of the columns without symbols such that all entries
-are less than or equal to 0 and the number of non-zero entries are maximized
-by solving the following linear programming problem:
+  Solve the Maximal Negative Entries problem for matrix a.
 
-maximise:
-  sum y
-such that:
-  Ax + y + z = 0
-  0 <= x
-  0 <= z
-  0 <= y <= 1
-(where <= on vectors is taken pointwise).
+  Returns the weights vector and the solution vector, in that order.
 
-Because of the limitations of the linear programming library we're using, x, y and z are represented
-as 1 vector x ++ y ++ z, and we just work with the appropriate parts of that big vector.
+  == Maximal Negative Entries ==
+  Finds a linear combination of the columns without symbols such that all entries
+  are less than or equal to 0 and the number of non-zero entries are maximized
+  by solving the following linear programming problem:
+
+  maximise:
+    sum y
+  such that:
+    Ax + y <= 0
+    0 <= x
+    0 <= y <= 1
+  (where <= on vectors is taken pointwise).
+
+  Because of the limitations of the linear programming library we're using,
+  x, y and z are represented as a single big vector
+    x ++ y ++ z.
+  The actual program we solve is more like
+
+  maximise:
+    ( 0 1 ) * ( x y )
+  subject to:
+    ( A I ) * ( x y ) <= 0
+    0 <= x
+    0 <= y <= 1
 -}
+lin :: NumMatrix -> ([Double], [Bool])
+lin nums =
+  let -- Switch from list of columns to list of rows
+      rows = transpose nums
+      -- useful lengths
+      lenX = length nums
+      lenY = length rows
+      -- Generate problem objective: Maximise sum y
+      prob = Maximize $ replicate lenX 0 ++ replicate lenY 1
+      -- Generate constraint matrix
+      idMat = toLists $ ident lenY
+      -- ( A I )
+      constrMat = zipWith (++) rows idMat
+      constr = Dense $ map (:<=: 0) constrMat
+      -- set up bounds
+      bounds = map (\x -> x :&: (0,1)) [lenX + 1..lenX + lenY]
+      -- solve the problem
+      solution = simplex prob constr bounds
+  in
+    case solution of
+        Optimal (objective, allWeights) ->
+          let
+            weights = allWeights |> take lenX
+            selected = allWeights |> drop lenX |> map (> 0)
+          in (weights, selected)
+        _ -> error "Failed to solve linear program; this should be impossible!"
 
+-------------------------------
+-- Solve the overall problem --
+-------------------------------
 
-type TermResult = Bool
--- type TermResult = [(Integer, Measure)]
+{-
+  Split a matrix into the pure numeric columns and the the mixed numeric/inf
+  columns, and record the original indices.
+-}
+numericFilterMatrix :: TMatrix -> (([Int], NumMatrix), ([Int], TMatrix))
+numericFilterMatrix m =
+  let mIndexed = enumerate m
+      (numericCols, mixedCols) = partition (all isNum . snd) mIndexed
+      (numericIdxs, numericMatrix) = second (map (map theNum)) $ unzip numericCols
+      (mixedIdxs, mixedMatrix) = unzip mixedCols
+   in
+    ((numericIdxs, numericMatrix), (mixedIdxs, mixedMatrix))
 
-type Tmatrix = [[Entry]]
-
-solveMat :: Tmatrix -> TermResult
-solveMat termmat = null termmat || termCheck termmat
-
-vecCheck :: [Entry] -> Val
-vecCheck vec | null vec = Na
-             | otherwise = go True vec
-    where
--- TODO: make this simpler
-        go v [] | v                   = Le
-                | otherwise           = Leq
-        go v (Num y : ys) | y > 0     = Na
-                          | y == 0    = go False ys
-                          | otherwise = go v ys
-        go v (Sym y : ys) | y == Na   = Na
-                          | y == Le   = go v ys
-                          | otherwise = go False ys
-
-isReduced :: [Entry] -> Bool
-isReduced v = vecCheck v == Le
-
-removeIndex :: Int -> [a] -> [a]
-removeIndex n xs = let (x, y:ys) = splitAt n xs
-                   in (x ++ ys)
-
-lexic :: Tmatrix -> Tmatrix -> Tmatrix
-lexic [] _ = []
-lexic ret [] = ret
-lexic ret (x:xs) | vecCheck x == Na = lexic ret xs
-                 | otherwise        = lexic (reduce 0 x ret) xs
-               where
-                   reduce n [] a = a
-                   reduce n (Num y : ys) a | y < 0     = reduce n ys (map (removeIndex n) a)
-                                           | otherwise = reduce (n+1) ys a
-                   reduce n (Sym y : ys) a | y == Le || y == Leq = reduce n ys (map (removeIndex n) a)
-                                           | otherwise = reduce (n+1) ys a
-
-lexic' :: Tmatrix -> (Bool, Tmatrix)
-lexic' a | b == a     = (False, [])
-         | all null b = (True, [])
-         | otherwise  = (False, b)
-  where
-    b = lexic a a
-
-toLists' a = toLists (tr a :: Matrix Double)
-fromLists' a = tr (fromLists a) :: Matrix Double
-
-addId a = a ++ toLists' (ident (length a))
-
-
-bindLists [] _ _ = []
-bindLists (b:bs) n lenx = (idRow 0 :&: (0, 1)) : (b :==: 0) : bindLists bs (n+1) lenx
-    where
-      idRow k | k == n + lenx = 1:idRow (k+1)
-              | k == length b = []
-              | otherwise     = 0:idRow (k+1)
-
-split :: [a] -> ([a], [a])
-split myList = splitAt ((length myList + 1) `div` 2) myList
-
-lin a = let (nums, rest) = extract a [] []
-
-            -- List of rows
-            rows = toLists $ tr (fromLists nums) :: [[Double]]
-
-            -- Maximise sum y
-            prob = Maximize $ sumy nums rows
-
-            idMat = toLists $ ident (length rows)
-
-            constrMat = zipWith (++) rows (zipWith (++) idMat idMat)
-            constr = Dense $ bindLists constrMat 0 (length nums)
-
-            Optimal (b, bs) = simplex prob constr []
-
-            x = take (length nums) bs
-            x' = map Num (toList (fromLists' nums #> vector x))
-          in (x':rest)
-  where
-    extract [] num sym = (num, sym)
-    extract (x:xs) num sym | all isNum x = extract xs (map theNum x : num) sym
-                           | otherwise   = extract xs num (x:sym)
-
-    sumy xs ys = map (const 0) xs ++ map (const 1) ys ++ map (const 0) ys
-
-
-
-lin' a =
-  let (b:bs) = lin a in (isReduced b, b:bs)
-
-
--- Checks if a function with associated matrix `a` terminates
-termCheck a =
-    let
-        (v, a') = lin' a
-    in
-      if v
-      then
-        v
+{-
+  Do the linear/lexicographic loop
+-}
+calculateTerminationMeasure :: [m] -> TMatrix -> [[(Double, m)]] -> Maybe [[(Double, m)]]
+calculateTerminationMeasure measures a out =
+  let ((is, aNumeric), (js, aMixed)) = numericFilterMatrix (traceShowId a)
+   in if null aNumeric
+      then Nothing
       else
-        let (v', a'') = lexic' a'
-        in
-          if null a''
-          then
-            v'
-          else
-            termCheck a''
+        let
+          (weights, sol) = lin aNumeric
+          colsPicked = enumerate weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
+          rowsToElim = map fst . filter snd . enumerate $ sol
+          weightedMeasures = zip weights (selectIdxs colsPicked measures)
+          measuresRemaining = selectIdxs js measures
+        in if null aMixed
+           then Just out
+           else
+              calculateTerminationMeasure
+                measuresRemaining
+                (map (dropIdxs rowsToElim) aMixed)
+                (snoc out weightedMeasures)
+
+solveMat :: TMatrix -> TermResult
+solveMat termmat =
+  calculateTerminationMeasure [0..length termmat] termmat []

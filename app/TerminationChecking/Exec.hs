@@ -4,10 +4,8 @@ module TerminationChecking.Exec
   (
     Entry(..),
     isNum,
-    isSym,
     theNum,
-    theSym,
-    Val(..),
+    isInf,
     matrixify,
   )
 where
@@ -107,26 +105,19 @@ termToCallterms = snd . termToCalltermsAux
     termToCalltermsAux (TOp v) = error "undefined"
     termToCalltermsAux (TIf tc tt tf) = error "undefined"
 
-
-data Val = Na | Le | Leq
-  deriving (Show, Eq)
-
-data Entry = Num Double | Sym Val
+data Entry = Num Double | Inf
   deriving (Show, Eq)
 
 isNum :: Entry -> Bool
 isNum Num{} = True
 isNum _ = False
 
-isSym :: Entry -> Bool
-isSym Sym{} = True
-isSym _ = False
-
 theNum :: Entry -> Double
 theNum (Num x) = x
 
-theSym :: Entry -> Val
-theSym (Sym x) = x
+isInf :: Entry -> Bool
+isInf Inf{} = True
+isInf _ = False
 
 {-
   Turns a function definition (along with the name of the function) into an
@@ -155,7 +146,7 @@ matrixify name fundef = matrix
                             (\(fn, t) -> if fn == name then Just t else Nothing)
                             (termToCallterms t)
           in map (argp,) callterms)
-    measures = traceShowId $ nub . concatMap (uncurry makeMeasures) $ argpairs
+    measures = nub . concatMap (uncurry makeMeasures) $ argpairs
     reduced =
       map
         (\m ->
@@ -167,7 +158,7 @@ matrixify name fundef = matrix
                     -- Case 1: kb + |x| - (ka + |x|) == kb - ka
                     -- Case 2: kb - (ka + |x|) <= kb - ka
                     then Num (fromInteger (kb - ka))
-                  else Sym Na))
+                  else Inf))
           argpairs))
         measures
     matrix = map snd {- . traceShowId $ -} reduced
