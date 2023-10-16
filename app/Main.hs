@@ -25,12 +25,13 @@ prettyMatrix m =
 -- Compiler Phase and Phase Data
 --
 
-data Phase = PhProgText | PhProgram | PhMatrix | PhSoln
+data Phase = PhProgText | PhProgram | PhMeasures | PhMatrix | PhSoln
   deriving (Show, Eq, Ord)
 
 data PhaseData =
   PhDatProgText String |
   PhDatProgram Prog |
+  PhDatMeasures Prog |
   PhDatMatrix (M.Map String [[Entry]]) |
   PhDatSoln (M.Map String TermResult)
   deriving (Show, Eq)
