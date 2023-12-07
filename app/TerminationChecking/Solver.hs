@@ -159,7 +159,7 @@ numericFilterMatrix m =
 -}
 calculateTerminationMeasure :: [m] -> TMatrix -> [[(Double, m)]] -> Maybe [[(Double, m)]]
 calculateTerminationMeasure measures mat out =
-  let ((is, matNumeric), (js, matMixed)) = traceShowId $ numericFilterMatrix mat
+  let ((is, matNumeric), (js, matMixed)) = {- traceShowId $ -} numericFilterMatrix mat
    in if null matNumeric
       then Nothing
       else
