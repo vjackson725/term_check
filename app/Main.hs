@@ -1,5 +1,7 @@
 {-# LANGUAGE LambdaCase, ScopedTypeVariables, TupleSections #-}
 
+import Debug.Trace
+
 import Control.Monad (void)
 import Data.Foldable
 import Data.List
@@ -33,7 +35,7 @@ data PhaseData =
   PhDatProgram Prog |
   PhDatMeasures Prog |
   PhDatMatrix (M.Map String [[Entry]]) |
-  PhDatSoln (M.Map String TermResult)
+  PhDatSoln (M.Map String (TermResult String))
   deriving (Show, Eq)
 
 isPhase :: Phase -> PhaseData -> Bool
@@ -66,9 +68,9 @@ termcheckArgparser =
   info
     (subparser
       (  command "makematrix" (info makeMatrixCmd (progDesc "Make a matrix from a program"))
-      <> command "matrixcheck" (info matrixCheckCmd (progDesc "Check a matrix is solvable"))
+      -- <> command "matrixcheck" (info matrixCheckCmd (progDesc "Check a matrix is solvable"))
       <> command "programcheck" (info programCheckCmd (progDesc "Check a program terminates"))
-      <> command "solve" (info programCheckCmd (progDesc "Check a program terminates"))
+      <> command "solve" (info programCheckCmd (progDesc "Check a program terminates (alias of programcheck)"))
       ) <**> helper)
     (progDesc "Linear-Lexicographic program termination checker.")
 

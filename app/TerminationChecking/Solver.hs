@@ -67,7 +67,7 @@ snoc (x:xs) y = x : (snoc xs y)
 -----------
 
 -- type TermResult = Bool
-type TermResult = Maybe [[(Double, Int)]]
+type TermResult m = Maybe [[(Double, m)]]
 
 -- A matrix of numbers, represented as a list of columns
 type NumMatrix = [[Double]]
@@ -110,11 +110,11 @@ type TMatrix = [[Entry]]
     0 <= y <= 1
 -}
 lin :: NumMatrix -> ([Double], [Bool])
-lin nums =
+lin numMat =
   let -- Switch from list of columns to list of rows
-      rows = transpose nums
+      rows = transpose numMat
       -- useful lengths
-      lenX = length nums
+      lenX = length numMat
       lenY = length rows
       -- Generate problem objective: Maximise sum y
       prob = Maximize $ replicate lenX 0 ++ replicate lenY 1
@@ -157,25 +157,26 @@ numericFilterMatrix m =
   Do the linear/lexicographic loop
 -}
 calculateTerminationMeasure :: [m] -> TMatrix -> [[(Double, m)]] -> Maybe [[(Double, m)]]
-calculateTerminationMeasure measures a out =
-  let ((is, aNumeric), (js, aMixed)) = numericFilterMatrix (traceShowId a)
-   in if null aNumeric
+calculateTerminationMeasure measures mat out =
+  let ((is, matNumeric), (js, matMixed)) = traceShowId $ numericFilterMatrix mat
+   in if null matNumeric
       then Nothing
       else
         let
-          (weights, sol) = lin aNumeric
+          (weights, sol) = lin matNumeric
           colsPicked = enumerate weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
           rowsToElim = map fst . filter snd . enumerate $ sol
           weightedMeasures = zip weights (selectIdxs colsPicked measures)
           measuresRemaining = selectIdxs js measures
-        in if null aMixed
-           then Just out
+          newOut = snoc out weightedMeasures
+        in if null matMixed
+           then Just newOut
            else
               calculateTerminationMeasure
                 measuresRemaining
-                (map (dropIdxs rowsToElim) aMixed)
-                (snoc out weightedMeasures)
+                (map (dropIdxs rowsToElim) matMixed)
+                newOut
 
-solveMat :: TMatrix -> TermResult
+solveMat :: TMatrix -> TermResult String
 solveMat termmat =
-  calculateTerminationMeasure [0..length termmat] termmat []
+  calculateTerminationMeasure (map (\n -> 'm' : show n) [0..length termmat]) termmat []

@@ -146,8 +146,8 @@ matrixify name fundef = matrix
                             (\(fn, t) -> if fn == name then Just t else Nothing)
                             (termToCallterms t)
           in map (argp,) callterms)
-    measures = nub . concatMap (uncurry makeMeasures) $ argpairs
-    reduced =
+    measures = {- traceShowId $ -} nub . concatMap (uncurry makeMeasures) $ argpairs
+    reduced = {- traceShowId $ -}
       map
         (\m ->
           (m, map
@@ -161,4 +161,4 @@ matrixify name fundef = matrix
                   else Inf))
           argpairs))
         measures
-    matrix = map snd {- . traceShowId $ -} reduced
+    matrix = map snd reduced
