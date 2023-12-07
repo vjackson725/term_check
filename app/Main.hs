@@ -34,7 +34,7 @@ data PhaseData =
   PhDatProgText String |
   PhDatProgram Prog |
   PhDatMeasures Prog |
-  PhDatMatrix (M.Map String [[Entry]]) |
+  PhDatMatrix (M.Map String ([Measure], [[Entry]])) |
   PhDatSoln (M.Map String (TermResult String))
   deriving (Show, Eq)
 
@@ -67,8 +67,7 @@ termcheckArgparser :: ParserInfo Command
 termcheckArgparser =
   info
     (subparser
-      (  command "makematrix" (info makeMatrixCmd (progDesc "Make a matrix from a program"))
-      -- <> command "matrixcheck" (info matrixCheckCmd (progDesc "Check a matrix is solvable"))
+      (  command "makematrix" (info makeMatrixCmd (progDesc "Print the primitive measure and termination matrix for every function in a program"))
       <> command "programcheck" (info programCheckCmd (progDesc "Check a program terminates"))
       <> command "solve" (info programCheckCmd (progDesc "Check a program terminates (alias of programcheck)"))
       ) <**> helper)
@@ -105,8 +104,9 @@ phaseStep (PhDatProgText progText) =
 phaseStep (PhDatProgram prog) =
   return . PhDatMatrix $
     M.mapWithKey matrixify prog
-phaseStep (PhDatMatrix mat) =
-  return . PhDatSoln $ M.map solveMat mat
+phaseStep (PhDatMatrix fnMeasAndMat) =
+  -- TODO: fix duplication of measure name logic
+  return . PhDatSoln $ M.map (\(meas, mat) -> solveMat ((map (\n -> 'm' : show n) [0..length meas])) mat) fnMeasAndMat
 
 main :: IO ()
 main =
@@ -120,12 +120,12 @@ main =
         PhProgText -> return $ PhDatProgText filetext
         PhProgram  ->
           -- TODO: filetext to abstract program
-          error "ERROR: abstract program phase start not implemented yet"
+          error "ERROR: Start from abstract program not implemented\n"
         PhMatrix   ->
           -- TODO: filetext to matrix
-          error "ERROR: matrix phase start not implemented yet\n"
+          error "ERROR: Start from matrix not implemented\n"
         PhSoln     ->
-          hPutStr stderr "ERROR: can't start in solution phase\n" >>
+          hPutStr stderr "Internal Error: can't start in solution phase\n" >>
           exitWith (ExitFailure 1)
     -- Run program
     result <- doUntil (isPhase endPhase) phaseStep phin
@@ -133,15 +133,21 @@ main =
     _ <-
       case result of
         PhDatProgText progtext ->
-          hPutStr stderr "ERROR: can't end in read file phase\n" >>
+          hPutStr stderr "Internal Error: can't end in read file phase\n" >>
           exitWith (ExitFailure 1)
         PhDatProgram prog ->
           print prog
-        PhDatMatrix mats ->
+        PhDatMatrix fnMeasAndMat ->
           traverse_
-            (\(fnnm, mat) ->
-              void $ putStrLn (fnnm ++ ": " ++ prettyMatrix mat))
-            (M.toAscList mats)
+            (\(fnnm, (meas, mat)) ->
+              do
+                let measNames = (map (\n -> 'm' : show n) [0..length meas])
+                _ <- putStrLn ("== FN " ++ fnnm ++ " ==")
+                _ <- putStr (intercalate "\n" $ map (\(n,m) -> n ++ ": " ++ show m) $ zip measNames meas)
+                _ <- putStrLn ""
+                _ <- putStrLn (prettyMatrix mat)
+                return ())
+            (M.toAscList fnMeasAndMat)
         PhDatSoln res ->
           print res
     return ()

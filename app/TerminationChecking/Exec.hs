@@ -135,8 +135,8 @@ isInf _ = False
       the measure we can return later, although we don't do so at the moment.)
   4. These reduced values are the entries in the output entry matrix.
 -}
-matrixify :: (Show v, Eq v) => v -> FunDef v -> [[Entry]]
-matrixify name fundef = matrix
+matrixify :: (Show v, Eq v) => v -> FunDef v -> ([Measure], [[Entry]])
+matrixify name fundef = (measures, matrix)
   where
     argpairs =
       fundef

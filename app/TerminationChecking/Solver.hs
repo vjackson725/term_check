@@ -1,5 +1,6 @@
 module TerminationChecking.Solver
   ( TermResult
+  , Measure
   , solveMat
   )
 where
@@ -177,6 +178,6 @@ calculateTerminationMeasure measures mat out =
                 (map (dropIdxs rowsToElim) matMixed)
                 newOut
 
-solveMat :: TMatrix -> TermResult String
-solveMat termmat =
-  calculateTerminationMeasure (map (\n -> 'm' : show n) [0..length termmat]) termmat []
+solveMat :: [String] -> TMatrix -> TermResult String
+solveMat measNames termmat =
+  calculateTerminationMeasure measNames termmat []
