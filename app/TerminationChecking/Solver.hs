@@ -157,7 +157,7 @@ numericFilterMatrix m =
 {-
   Do the linear/lexicographic loop
 -}
-calculateTerminationMeasure :: [m] -> TMatrix -> [[(Double, m)]] -> Maybe [[(Double, m)]]
+calculateTerminationMeasure :: Show m => [m] -> TMatrix -> [[(Double, m)]] -> Maybe [[(Double, m)]]
 calculateTerminationMeasure measures mat out =
   let ((is, matNumeric), (js, matMixed)) = {- traceShowId $ -} numericFilterMatrix mat
    in if null matNumeric
@@ -165,10 +165,10 @@ calculateTerminationMeasure measures mat out =
       else
         let
           (weights, sol) = lin matNumeric
-          colsPicked = enumerate weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
+          colsPicked = zip is weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
           rowsToElim = map fst . filter snd . enumerate $ sol
-          weightedMeasures = zip weights (selectIdxs colsPicked measures)
-          measuresRemaining = selectIdxs js measures
+          weightedMeasures = {- traceShowId $ -} zip weights (selectIdxs colsPicked measures)
+          measuresRemaining = {- traceShowId $ -} selectIdxs js {- $ traceShowId -} measures
           newOut = snoc out weightedMeasures
         in if null matMixed
            then Just newOut

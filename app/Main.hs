@@ -106,7 +106,7 @@ phaseStep (PhDatProgram prog) =
     M.mapWithKey matrixify prog
 phaseStep (PhDatMatrix fnMeasAndMat) =
   -- TODO: fix duplication of measure name logic
-  return . PhDatSoln $ M.map (\(meas, mat) -> solveMat ((map (\n -> 'm' : show n) [0..length meas])) mat) fnMeasAndMat
+  return . PhDatSoln $ M.map (\(meas, mat) -> solveMat ((map (\n -> 'm' : show n) [0..max 0 (length meas-1)])) mat) fnMeasAndMat
 
 main :: IO ()
 main =
@@ -141,8 +141,8 @@ main =
           traverse_
             (\(fnnm, (meas, mat)) ->
               do
-                let measNames = (map (\n -> 'm' : show n) [0..length meas])
-                _ <- putStrLn ("== FN " ++ fnnm ++ " ==")
+                let measNames = (map (\n -> 'm' : show n) [0..max 0 (length meas-1)])
+                _ <- putStrLn ("== Fun: " ++ fnnm ++ " ==")
                 _ <- putStr (intercalate "\n" $ map (\(n,m) -> n ++ ": " ++ show m) $ zip measNames meas)
                 _ <- putStrLn ""
                 _ <- putStrLn (prettyMatrix mat)
