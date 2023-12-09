@@ -170,7 +170,9 @@ calculateTerminationMeasure measures mat out =
           weightedMeasures = {- traceShowId $ -} zip weights (selectIdxs colsPicked measures)
           measuresRemaining = {- traceShowId $ -} selectIdxs js {- $ traceShowId -} measures
           newOut = snoc out weightedMeasures
-        in if null matMixed
+        in if null colsPicked
+           then Nothing
+           else if null matMixed
            then Just newOut
            else
               calculateTerminationMeasure
