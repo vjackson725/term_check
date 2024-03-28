@@ -9,6 +9,7 @@
 -- The function rearranges a binary tree so that all right nodes are leaves,
 -- essentially making it a list.
 --
+-- Tree
 -- Leaf = Roll (Left ())
 -- Branch x y = Roll (Right (x, y))
 --

@@ -2,6 +2,7 @@
 -- Zero = Roll (Left ())
 -- Suc x = Roll (Right x)
 --
+-- Bool
 -- False = Left ()
 -- True = Right ()
 --
