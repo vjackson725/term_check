@@ -106,7 +106,11 @@ phaseStep (PhDatProgram prog) =
     M.mapWithKey matrixify prog
 phaseStep (PhDatMatrix fnMeasAndMat) =
   -- TODO: fix duplication of measure name logic
-  return . PhDatSoln $ M.map (\(meas, mat) -> solveMat ((map (\n -> 'm' : show n) [0..max 0 (length meas-1)])) mat) fnMeasAndMat
+  let soln = M.map
+              (\(meas, mat) ->
+                solveMat ((map (\n -> 'm' : show n) [0..max 0 (length meas-1)])) mat)
+              fnMeasAndMat
+   in return $ PhDatSoln soln
 
 main :: IO ()
 main =

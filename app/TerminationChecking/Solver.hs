@@ -164,20 +164,21 @@ calculateTerminationMeasure measures mat out =
       then Nothing
       else
         let
-          (weights, sol) = lin matNumeric
+          (weights, sol) = {- traceShowId $ -} lin matNumeric
           colsPicked = zip is weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
           rowsToElim = map fst . filter snd . enumerate $ sol
           weightedMeasures = {- traceShowId $ -} zip weights (selectIdxs colsPicked measures)
           measuresRemaining = {- traceShowId $ -} selectIdxs js {- $ traceShowId -} measures
           newOut = snoc out weightedMeasures
+          remainingMat = {- traceShowId $ -} map (dropIdxs rowsToElim) matMixed
         in if null colsPicked
            then Nothing
-           else if null matMixed
+           else if all null remainingMat
            then Just newOut
            else
               calculateTerminationMeasure
                 measuresRemaining
-                (map (dropIdxs rowsToElim) matMixed)
+                remainingMat
                 newOut
 
 solveMat :: [String] -> TMatrix -> TermResult String
