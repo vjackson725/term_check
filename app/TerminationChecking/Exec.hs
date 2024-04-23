@@ -153,11 +153,9 @@ matrixify name fundef = (measures, matrix)
           (m, map
             (\(a, b) ->
               let (ka, mmta) = runMeasure m (patternToTerm a)
-                  (kb, mmtb) =
-                    -- trace (show (patternToTerm a) ++ " vs. " ++ show b) $
-                    --  trace ("(" ++ show ka ++ " + " ++ show mmta ++ ") - (" ++ show kb ++ " + " ++ show mmtb) $
-                    runMeasure m b
-              in (if (mmta == mmtb || (not (null mmta) && null mmtb))
+                  (kb, mmtb) = runMeasure m b
+              in {- trace (show (ka, mmta) ++ " <? " ++ show (kb, mmtb)) $ -}
+                  (if (mmta == mmtb || (not (null mmta) && null mmtb))
                     -- Case 1: kb + |x| - (ka + |x|) == kb - ka
                     -- Case 2: kb - (ka + |x|) <= kb - ka
                     then Num (fromInteger (kb - ka))
