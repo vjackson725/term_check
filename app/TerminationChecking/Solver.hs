@@ -9,7 +9,8 @@ import Debug.Trace
 
 import Data.List (splitAt, replicate, sort, partition, transpose)
 import Data.Maybe (mapMaybe)
-import Data.Bifunctor (bimap, second)
+import Data.Bifunctor (bimap, first, second)
+import Data.Ratio ((%), denominator)
 import Numeric.LinearAlgebra (vector, (#>), (<#), toList, toLists, fromList, fromLists, tr, ident)
 import Numeric.LinearProgramming
 import Text.Parsec (parse)
@@ -68,7 +69,7 @@ snoc (x:xs) y = x : (snoc xs y)
 -----------
 
 -- type TermResult = Bool
-type TermResult m = Maybe [[(Double, m)]]
+type TermResult m = Maybe [[(Rational, m)]]
 
 -- A matrix of numbers, represented as a list of columns
 type NumMatrix = [[Double]]
@@ -157,14 +158,14 @@ numericFilterMatrix m =
 {-
   Do the linear/lexicographic loop
 -}
-calculateTerminationMeasure :: Show m => [m] -> TMatrix -> [[(Double, m)]] -> Maybe [[(Double, m)]]
+calculateTerminationMeasure :: Show m => [m] -> TMatrix -> [[(Rational, m)]] -> Maybe [[(Rational, m)]]
 calculateTerminationMeasure measures mat out =
   let ((is, matNumeric), (js, matMixed)) = {- traceShowId $ -} numericFilterMatrix mat
    in if null matNumeric
       then Nothing
       else
         let
-          (weights, sol) = {- traceShowId $ -} lin matNumeric
+          (weights, sol) = first (map toRational) $ lin matNumeric
           colsPicked = zip is weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
           rowsToElim = map fst . filter snd . enumerate $ sol
           weightedMeasures = {- traceShowId $ -} zip weights (selectIdxs colsPicked measures)
@@ -183,4 +184,10 @@ calculateTerminationMeasure measures mat out =
 
 solveMat :: [String] -> TMatrix -> TermResult String
 solveMat measNames termmat =
-  calculateTerminationMeasure measNames termmat []
+  do
+    lexlinmeas <- calculateTerminationMeasure measNames termmat []
+    return
+      (do
+        linmeas <- lexlinmeas
+        let lcmdenoms = foldr lcm 1 $ map (denominator . fst) linmeas
+        return $ map (first ((*) (lcmdenoms % 1))) linmeas)
