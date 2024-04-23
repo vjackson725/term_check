@@ -147,7 +147,13 @@ main =
               do
                 let measNames = (map (\n -> 'm' : show n) [0..max 0 (length meas-1)])
                 _ <- putStrLn ("== Fun: " ++ fnnm ++ " ==")
-                _ <- putStr (intercalate "\n" $ map (\(n,m) -> n ++ ": " ++ show m) $ zip measNames meas)
+                _ <- putStr (intercalate "\n" $ map
+                                                  (\(n,(fp, fr)) ->
+                                                    let pre =  n ++ ": " ++ "fix ("
+                                                        rpart = intercalate " <| " . map show . reverse $ fr
+                                                        mid = ") <| ("
+                                                        ppart = intercalate " <| " . map show . reverse $ fp
+                                                     in pre ++ rpart ++ mid ++ ppart ++")") $ zip measNames meas)
                 _ <- putStrLn ""
                 _ <- putStrLn (prettyMatrix mat)
                 return ())
