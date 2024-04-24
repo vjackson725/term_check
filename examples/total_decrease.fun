@@ -21,6 +21,6 @@ f (n, m) = ()
 -- g (x, SSSy) = g (SSx, y)
 -- g (x, y) = ()
 
-g (Roll (Right (Roll (Right (Roll (Right  x)), y)))) = g (x, Roll (Right (Roll (Right  y))))
-g (x, Roll (Right (Roll (Right (Roll (Right  y)))))) = g (Roll (Right (Roll (Right  x), y)))
+g (Roll (Right (Roll (Right (Roll (Right x))))), y) = g (x, Roll (Right (Roll (Right y))))
+g (x, Roll (Right (Roll (Right (Roll (Right y)))))) = g (Roll (Right (Roll (Right x))), y)
 g (x, y) = ()
