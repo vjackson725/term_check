@@ -68,6 +68,10 @@ makeRawMeasures = aux []
     -- conflict case
     aux m _ _ = []
 
+orElse :: Maybe a -> Maybe a -> Maybe a
+orElse ma@(Just a) _  = ma
+orElse Nothing     mb = mb
+
 makeMeasures :: Eq v => Pattern v -> Term v -> [Measure]
 makeMeasures p t =
   let rawMeas = makeRawMeasures p t
@@ -79,14 +83,17 @@ makeMeasures p t =
                       d <- [1..length mr-1]
                       guard (length mr `mod` d == 0) -- only the divisors
                       return d
-          reduced = do
-                      d <- divisors
-                      let chunks = chunksOf d mr
-                      -- invariant: more than one chunk, by non-length divisor
-                      let (c : chunks') = chunks
-                      guard (all (c ==) chunks')
-                      return c
-       in if null reduced then mr else head reduced
+          mout = foldr
+                    (\d ->
+                      (`orElse`
+                        (let chunks = chunksOf d mr
+                             -- invariant: more than one chunk, by non-length divisor
+                             (c : chunks') = chunks
+                        in if all (c ==) chunks' then Just c else Nothing))
+                    )
+                    Nothing
+                    divisors
+       in fromMaybe mr mout
 
 
 {-
