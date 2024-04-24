@@ -4,6 +4,16 @@ module TerminationChecking.Measure
   (Measure, makeMeasures, runMeasure)
 where
 
+import Debug.Trace
+
+import Control.Monad (guard)
+import Data.Map (Map)
+import Data.List.Split (chunksOf)
+import qualified Data.Map as Map
+import Data.Maybe (Maybe, fromMaybe)
+import Data.Bifunctor (first, second)
+import Data.List (groupBy)
+
 import TerminationChecking.Lang
 
 data MeasureStep =
@@ -16,8 +26,9 @@ data MeasureStep =
   MRoll |
   MLLtR |
   MRLtL
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
+-- (Base measure, Recursive measure)
 type Measure = ([MeasureStep], [MeasureStep])
 
 measureRecursive :: Eq v => v -> Term v -> [[MeasureStep]]
@@ -37,25 +48,46 @@ measureRecursive x t = measureRecursiveAux [] x t
     measureRecursiveAux m x (TOp v) = error "unimplemented"
     measureRecursiveAux m x (TIf tc tt tf) = error "unimplemented"
 
-makeMeasures :: Eq v => Pattern v -> Term v -> [Measure]
-makeMeasures = makeMeasuresAux []
+makeRawMeasures :: Eq v => Pattern v -> Term v -> [Measure]
+makeRawMeasures = aux []
   where
-    makeMeasuresAux :: Eq v => [MeasureStep] -> Pattern v -> Term v -> [Measure]
-    makeMeasuresAux m p (TVar x) = map (reverse m,) $ measureRecursive x (patternToTerm p)
-    makeMeasuresAux m (PVar x) t = map (reverse m,) $ measureRecursive x t
-    makeMeasuresAux _ PUnit TUnit = []
-    makeMeasuresAux _ (PBoolLit b0) (TBoolLit b1) = []
-    makeMeasuresAux _ (PNatLit n0) (TNatLit n1) = []
-    makeMeasuresAux m (PPair a0 a1) (TPair b0 b1) =
-      makeMeasuresAux (MPairL:m) a0 b0 ++ makeMeasuresAux (MPairR:m) a1 b1
-    makeMeasuresAux m (PSumL a) (TSumL b) = makeMeasuresAux (MSumL:m) a b
-    makeMeasuresAux m (PSumR a) (TSumR b) = makeMeasuresAux (MSumR:m) a b
-    makeMeasuresAux m (PRoll a) (TRoll b) = makeMeasuresAux (MRoll:m) a b
+    aux :: Eq v => [MeasureStep] -> Pattern v -> Term v -> [Measure]
+    aux m p (TVar x) = map (reverse m,) $ measureRecursive x (patternToTerm p)
+    aux m (PVar x) t = map (reverse m,) $ measureRecursive x t
+    aux _ PUnit TUnit = []
+    aux _ (PBoolLit b0) (TBoolLit b1) = []
+    aux _ (PNatLit n0) (TNatLit n1) = []
+    aux m (PPair a0 a1) (TPair b0 b1) =
+      aux (MPairL:m) a0 b0 ++ aux (MPairR:m) a1 b1
+    aux m (PSumL a) (TSumL b) = aux (MSumL:m) a b
+    aux m (PSumR a) (TSumR b) = aux (MSumR:m) a b
+    aux m (PRoll a) (TRoll b) = aux (MRoll:m) a b
     -- different sum conflict
-    makeMeasuresAux m (PSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
-    makeMeasuresAux m (PSumR a) (TSumL b) = [(reverse (MLLtR:m), [])]
+    aux m (PSumL a) (TSumR b) = [(reverse (MRLtL:m), [])]
+    aux m (PSumR a) (TSumL b) = [(reverse (MLLtR:m), [])]
     -- conflict case
-    makeMeasuresAux m _ _ = []
+    aux m _ _ = []
+
+makeMeasures :: Eq v => Pattern v -> Term v -> [Measure]
+makeMeasures p t =
+  let rawMeas = makeRawMeasures p t
+      reducedMeasures = map (second reduceMeasureR) rawMeas
+   in reducedMeasures
+  where
+    reduceMeasureR mr =
+      let divisors = do
+                      d <- [1..length mr-1]
+                      guard (length mr `mod` d == 0) -- only the divisors
+                      return d
+          reduced = do
+                      d <- divisors
+                      let chunks = chunksOf d mr
+                      -- invariant: more than one chunk, by non-length divisor
+                      let (c : chunks') = chunks
+                      guard (all (c ==) chunks')
+                      return c
+       in if null reduced then mr else head reduced
+
 
 {-
   This function takes a measure and a term, and runs the measure on the term to
