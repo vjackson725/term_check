@@ -16,6 +16,8 @@ import TerminationChecking.Lang
 import TerminationChecking.Parser (Prog, parse_program)
 import TerminationChecking.Solver
 
+import Text.Printf (printf)
+
 prettyMatrix :: [[Entry]] -> String
 prettyMatrix m =
   let lvl2 :: [[String]] = map (map (\case { Inf -> "ω"; Num n -> show n })) m
@@ -149,13 +151,18 @@ main =
                 _ <- putStrLn ("== Fun: " ++ fnnm ++ " ==")
                 _ <- putStr (intercalate "\n" $ map
                                                   (\(n,(fp, fr)) ->
-                                                    let pre =  n ++ ": " ++ "fix ("
-                                                        rpart = intercalate " <| " . map show . reverse $ fr
-                                                        mid = ") <| ("
+                                                    let rpart = intercalate " <| " . map show . reverse $ fr
                                                         ppart = intercalate " <| " . map show . reverse $ fp
-                                                     in pre ++ rpart ++ mid ++ ppart ++")") $ zip measNames meas)
-                _ <- putStrLn ""
+                                                     in if null fp then
+                                                          fmtFixOnly n rpart
+                                                        else if null fr then
+                                                          fmtPathOnly n ppart
+                                                        else
+                                                          fmtMeasure n rpart ppart) $
+                                                  zip measNames meas)
+                _ <- putStrLn "\n"
                 _ <- putStrLn (prettyMatrix mat)
+                _ <- putStrLn ""
                 return ())
             (M.toAscList fnMeasAndMat)
         PhDatSoln res ->
@@ -163,3 +170,6 @@ main =
     return ()
   where
     p = prefs showHelpOnError
+    fmtFixOnly  = printf "%s: fix (%s)"
+    fmtPathOnly = printf "%s: %s"
+    fmtMeasure  = printf "%s: fix (%s) <| (%s)"
