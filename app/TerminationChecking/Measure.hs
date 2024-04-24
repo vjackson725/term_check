@@ -8,11 +8,11 @@ import Debug.Trace
 
 import Control.Monad (guard)
 import Data.Map (Map)
-import Data.List.Split (chunksOf)
 import qualified Data.Map as Map
 import Data.Maybe (Maybe, fromMaybe)
 import Data.Bifunctor (first, second)
-import Data.List (groupBy)
+import Data.List (isSuffixOf)
+import Data.List.Split (chunksOf)
 
 import TerminationChecking.Lang
 
@@ -75,7 +75,13 @@ orElse Nothing     mb = mb
 makeMeasures :: Eq v => Pattern v -> Term v -> [Measure]
 makeMeasures p t =
   let rawMeas = makeRawMeasures p t
-      reducedMeasures = map (second reduceMeasureR) rawMeas
+      reducedMeasures =
+        map
+          (\(mb,mr) ->
+            let mr' = reduceMeasureR mr
+                mb' = until (\xs -> null mr' || (not . isSuffixOf mr') xs) (\xs -> take (length xs - length mr') xs) mb
+             in (mb', mr'))
+          rawMeas
    in reducedMeasures
   where
     reduceMeasureR mr =
