@@ -15,6 +15,6 @@
 --   [  1  1 -3 ]
 --   [  0 -2  1 ].
 
-f (Roll x, y, z) = f (x, Roll y, z)
-f (x, y, Roll (Roll (Roll z))) = f (Roll x, Roll y, z)
-f (x, Roll (Roll y), z) = f (x, y, Roll z)
+f (Roll (Right x), y, z) = f (x, Roll (Right y), z)
+f (x, y, Roll (Right (Roll (Right (Roll (Right z)))))) = f (Roll (Right x), Roll (Right y), z)
+f (x, Roll (Right (Roll (Right y))), z) = f (x, y, Roll (Right z))

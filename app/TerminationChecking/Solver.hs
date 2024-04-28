@@ -128,7 +128,7 @@ lin numMat =
       -- set up bounds
       bounds = map (\x -> x :&: (0,1)) [lenX + 1..lenX + lenY]
       -- solve the problem
-      solution = simplex prob constr bounds
+      solution = exact prob constr bounds
   in
     case solution of
         Optimal (objective, allWeights) ->
