@@ -7,6 +7,7 @@ where
 
 import Debug.Trace
 
+import Control.Monad (guard)
 import Data.List (splitAt, replicate, sort, partition, transpose)
 import Data.Maybe (mapMaybe)
 import Data.Bifunctor (bimap, first, second)
@@ -146,40 +147,32 @@ lin numMat =
   Split a matrix into the pure numeric columns and the the mixed numeric/inf
   columns, and record the original indices.
 -}
-numericFilterMatrix :: TMatrix -> (([Int], NumMatrix), ([Int], TMatrix))
+numericFilterMatrix :: TMatrix -> ([Int], NumMatrix)
 numericFilterMatrix m =
   let mIndexed = enumerate m
       (numericCols, mixedCols) = partition (all isNum . snd) mIndexed
       (numericIdxs, numericMatrix) = second (map (map theNum)) $ unzip numericCols
-      (mixedIdxs, mixedMatrix) = unzip mixedCols
    in
-    ((numericIdxs, numericMatrix), (mixedIdxs, mixedMatrix))
+    (numericIdxs, numericMatrix)
 
 {-
   Do the linear/lexicographic loop
 -}
 calculateTerminationMeasure :: Show m => [m] -> TMatrix -> [[(Rational, m)]] -> Maybe [[(Rational, m)]]
 calculateTerminationMeasure measures mat out =
-  let ((is, matNumeric), (js, _)) = {- traceShowId $ -} numericFilterMatrix mat
-   in if null is
-      then Nothing
-      else
-        let
-          (weights, sol) = first (map toRational) $ lin matNumeric
-          colsPicked = zip is weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
-          rowsToElim = map fst . filter snd . enumerate $ sol
-          weightedMeasures = {- traceShowId $ -} zip weights (selectIdxs colsPicked measures)
-          newOut = snoc out weightedMeasures
-          remainingMat = {- traceShowId $ -} map (dropIdxs rowsToElim) mat
-        in if null colsPicked
-           then Nothing
-           else if all null remainingMat
-           then Just newOut
-           else
-              calculateTerminationMeasure
-                measures
-                remainingMat
-                newOut
+  do
+    let (is, matNumeric) = {- traceShowId $ -} numericFilterMatrix mat
+    guard (not (null is))
+    let (weights, sol) = {- traceShowId $ -} first (map toRational) $ lin matNumeric
+        (isPicked, weightsPicked) = zip is weights |> filter (\(k, w) -> w > 0) |> unzip
+    guard (not (null isPicked))
+    let rowsToElim = map fst . filter snd . enumerate $ sol
+        weightedMeasures = {- traceShowId $ -} zip weightsPicked (selectIdxs isPicked measures)
+        newOut = snoc out weightedMeasures
+        remainingMat = {- traceShowId $ -} map (dropIdxs rowsToElim) mat
+    if all null remainingMat
+    then return newOut
+    else calculateTerminationMeasure measures remainingMat newOut
 
 solveMat :: [String] -> TMatrix -> TermResult String
 solveMat measNames termmat =
