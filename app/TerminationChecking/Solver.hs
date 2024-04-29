@@ -160,8 +160,8 @@ numericFilterMatrix m =
 -}
 calculateTerminationMeasure :: Show m => [m] -> TMatrix -> [[(Rational, m)]] -> Maybe [[(Rational, m)]]
 calculateTerminationMeasure measures mat out =
-  let ((is, matNumeric), (js, matMixed)) = {- traceShowId $ -} numericFilterMatrix mat
-   in if null matNumeric
+  let ((is, matNumeric), (js, _)) = {- traceShowId $ -} numericFilterMatrix mat
+   in if null is
       then Nothing
       else
         let
@@ -169,16 +169,15 @@ calculateTerminationMeasure measures mat out =
           colsPicked = zip is weights |> mapMaybe (\(k, w) -> if w > 0 then Just k else Nothing)
           rowsToElim = map fst . filter snd . enumerate $ sol
           weightedMeasures = {- traceShowId $ -} zip weights (selectIdxs colsPicked measures)
-          measuresRemaining = {- traceShowId $ -} selectIdxs js {- $ traceShowId -} measures
           newOut = snoc out weightedMeasures
-          remainingMat = {- traceShowId $ -} map (dropIdxs rowsToElim) matMixed
+          remainingMat = {- traceShowId $ -} map (dropIdxs rowsToElim) mat
         in if null colsPicked
            then Nothing
            else if all null remainingMat
            then Just newOut
            else
               calculateTerminationMeasure
-                measuresRemaining
+                measures
                 remainingMat
                 newOut
 
