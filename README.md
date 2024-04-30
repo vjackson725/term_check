@@ -26,23 +26,29 @@ The expected output for `ackermann.fun` is
 ```
 > cabal run term-check -- makematrix examples/ackermann.fun 
 == Fun: ack ==
-m0: ([MPairL],[MRoll,MSumR,MPairR])
-m1: ([MPairR],[MRoll,MSumR,MPairR])
-m2: ([MPairR,MRoll,MRLtL],[])
+m0: fix (MSumR <| MRoll) <| (MPairL)
+m1: fix (MSumR <| MRoll) <| (MPairR)
+m2: MRLtL <| MRoll <| MPairR
+
 [[-1.0, 0.0, -1.0], [ω, -1.0, 1.0], [ω, ω, -1.0]]
 
 > cabal run term-check -- solve examples/ackermann.fun 
-fromList [("ack",Just [[(1.0,"m0")],[(1.0,"m1")]])]
+== Fun: ack ==
+Found termination measure:
+  [1*m0, 1*m1]
 ```
 
 The expected output for `sparse_list.fun` is
 ```
 > cabal run term-check -- makematrix examples/sparse_list.fun 
 == Fun: toList ==
-m0: ([MRoll,MSumR,MPairR,MPairL],[MRoll,MSumR])
-m1: ([],[MRoll,MSumR,MPairR,MPairR])
+m0: fix (MSumR <| MRoll) <| (MPairL <| MPairR <| MSumR <| MRoll)
+m1: fix (MPairR <| MPairR <| MSumR <| MRoll)
+
 [[-1.0, ω], [0.0, -1.0]]
 
 > cabal run term-check -- solve examples/sparse_list.fun 
-fromList [("toList",Just [[(1.0,"m1")],[(1.0,"m0")]])]
+== Fun: toList ==
+Found termination measure:
+  [1*m1, 1*m0]
 ```
