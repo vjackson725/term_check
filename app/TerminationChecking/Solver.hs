@@ -11,7 +11,7 @@ import Control.Monad (guard)
 import Data.List (splitAt, replicate, sort, partition, transpose)
 import Data.Maybe (mapMaybe)
 import Data.Bifunctor (bimap, first, second)
-import Data.Ratio ((%), denominator)
+import Data.Ratio ((%), numerator, denominator)
 import Numeric.LinearAlgebra (vector, (#>), (<#), toList, toLists, fromList, fromLists, tr, ident)
 import Numeric.LinearProgramming
 import Text.Parsec (parse)
@@ -70,7 +70,7 @@ snoc (x:xs) y = x : (snoc xs y)
 -----------
 
 -- type TermResult = Bool
-type TermResult m = Maybe [[(Rational, m)]]
+type TermResult m = Maybe [[(Integer, m)]]
 
 -- A matrix of numbers, represented as a list of columns
 type NumMatrix = [[Double]]
@@ -182,4 +182,5 @@ solveMat measNames termmat =
       (do
         linmeas <- lexlinmeas
         let lcmdenoms = foldr lcm 1 $ map (denominator . fst) linmeas
-        return $ map (first ((*) (lcmdenoms % 1))) linmeas)
+            normalised = map (first (numerator . (*) (lcmdenoms % 1))) linmeas
+        return $ normalised)

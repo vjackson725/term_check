@@ -165,8 +165,19 @@ main =
                 _ <- putStrLn ""
                 return ())
             (M.toAscList fnMeasAndMat)
-        PhDatSoln res ->
-          print res
+        PhDatSoln fnress ->
+          traverse_
+            (\(fnnm, mres) ->
+              putStrLn ("== Fun: " ++ fnnm ++ " ==") >>
+              (case mres of
+                Nothing ->
+                  putStrLn "Failed to show termination"
+                Just res ->
+                  putStrLn "Found termination measure:" >>
+                  putStr "  " >>
+                  putStrLn ("[" ++ intercalate ", " (map (intercalate " + " . map (\(k,m) -> show k ++ "*" ++ m)) res) ++ "]")) >>
+              putStrLn "")
+            (M.toAscList fnress)
     return ()
   where
     p = prefs showHelpOnError
