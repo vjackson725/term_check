@@ -1,24 +1,15 @@
 cabal-version:      2.4
 name:               term-check
-version:            0.1.0.0
+version:            1.0.0
 
--- A short (one-line) description of the package.
--- synopsis:
+synopsis: Termination checking for recursive functions
+bug-reports: https://github.com/vjackson725/term_check/issues
 
--- A longer description of the package.
--- description:
-
--- A URL where users can report bugs.
--- bug-reports:
-
--- The license under which the package is released.
--- license:
+License:            GPL-3
+License-file:       LICENSE
 author:             Raphael Douglas Giles
--- maintainer:         firstname.lastname@email.provider
 
--- A copyright notice.
--- copyright:
--- category:
+category: Tools
 extra-source-files: CHANGELOG.md
 
 executable term-check
@@ -28,8 +19,9 @@ executable term-check
                     , TerminationChecking.Measure
                     , TerminationChecking.Parser
                     , TerminationChecking.Solver
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
+    other-extensions: LambdaCase
+                    , ScopedTypeVariables
+                    , TupleSections
     build-depends:    base >= 4.16 && < 5
                     , hmatrix >= 0.20
                     , hmatrix-glpk >= 0.4.0
