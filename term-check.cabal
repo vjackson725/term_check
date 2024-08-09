@@ -5,7 +5,7 @@ version:            1.0.0
 synopsis: Termination checking for recursive functions
 bug-reports: https://github.com/vjackson725/term_check/issues
 
-License:            GPL-3
+License:            GPL-3.0-only
 License-file:       LICENSE
 author:             Raphael Douglas Giles
 
