@@ -61,6 +61,8 @@ eval st (TIf tb tt tf) =
     VBool True  -> eval st tt
     VBool False -> eval st tf
     _ -> VUndefined
+eval st TPChoice{} =
+  error "not implemented in this semantics"
 eval st (TApp (TVar xfn) t) =
   case Map.lookup xfn st of
     Just (VFunDef fdefn) ->

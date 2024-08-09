@@ -27,6 +27,7 @@ data Term v =
   TNatLit Integer |
   TPair (Term v) (Term v) |
   TIf (Term v) (Term v) (Term v) |
+  TPChoice Double (Term v) (Term v) |
   TApp (Term v) (Term v) |
   TSumL (Term v) |
   TSumR (Term v) |
@@ -75,6 +76,7 @@ subst_term b (TPair s t) = TPair (subst_term b s) (subst_term b t)
 subst_term b (TNatLit n) = TNatLit n
 subst_term b (TBoolLit n) = TBoolLit n
 subst_term b (TIf sb stt sff) = TIf (subst_term b sb) (subst_term b stt) (subst_term b sff)
+subst_term b (TPChoice p stt sff) = TPChoice p (subst_term b stt) (subst_term b sff)
 subst_term b (TApp s0 s1) = TApp (subst_term b s0) (subst_term b s1)
 subst_term b (TSumL s) = TSumL (subst_term b s)
 subst_term b (TSumR s) = TSumR (subst_term b s)
