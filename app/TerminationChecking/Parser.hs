@@ -51,6 +51,9 @@ parens = P.parens lexer
 braces :: Monad m => ParsecT String u m a -> ParsecT String u m a
 braces = P.braces lexer
 
+float :: Monad m => ParsecT String u m Double
+float = P.float lexer
+
 identifier :: Monad m => ParsecT String u m String
 identifier = P.identifier lexer
 
@@ -143,6 +146,10 @@ single_term_parser =
         try (symbol "if"   *> term_parser) <*>
         try (symbol "then" *> term_parser) <*>
         try (symbol "else" *> term_parser)) <?> "term if-then-else")
+  <|> ((TPChoice <$>
+        try (symbol "pchoice" *> braces float) <*>
+        try (symbol "then"    *> term_parser) <*>
+        try (symbol "else"    *> term_parser)) <?> "term pchoice")
   <|> try (TBoolLit <$> (symbol "False" *> return False) <?> "term False literal")
   <|> try (TBoolLit <$> (symbol "True"  *> return True) <?> "term True literal")
   <|> try (TSumL    <$> (symbol "Left"  *> term_parser) <?> "term left sum")
