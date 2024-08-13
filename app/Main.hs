@@ -15,14 +15,27 @@ import TerminationChecking.Exec
 import TerminationChecking.Lang
 import TerminationChecking.Parser (Prog, parse_program)
 import TerminationChecking.Solver
+import TerminationChecking.Misc
 
 import Text.Printf (printf)
 
 prettyMatrix :: [[Entry]] -> String
 prettyMatrix m =
-  let lvl2 :: [[String]] = map (map (\case { Inf -> "ω"; Num n -> show n })) m
-      lvl1 :: [String] =  map (('[' :) . foldr (++) "]" . intersperse ", ") lvl2
-      lvl0 :: String =  ('[' :) . foldr (++) "]" . intersperse ", " $ lvl1
+  let lvl2 :: [[String]] = map (map (\case { Inf -> "ω"; Num n -> show (fromRational n) })) m
+      colWidth = map (foldr (\x y -> max (length x) y) (0 :: Int)) $ transpose lvl2
+      lvl1 :: [String] =
+        map
+          (\row ->
+            let row2 =
+                  map
+                    (\(i,x) ->
+                      let width = colWidth !! i
+                      in replicate (width - length x) ' ' ++ x)
+                    (enumerate row)
+                row3 = concat (intersperse ", " $ row2)
+            in '[' : row3 ++ "]")
+          lvl2
+      lvl0 :: String =  foldr (++) "" . intersperse "\n" $ lvl1
     in lvl0
 
 --
