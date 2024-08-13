@@ -162,21 +162,27 @@ main =
               do
                 let measNames = (map (\n -> 'm' : show n) [0..max 0 (length meas-1)])
                 _ <- putStrLn ("== Fun: " ++ fnnm ++ " ==")
-                _ <- putStr (intercalate "\n" $ map
-                                                  (\(n,(fp, fr)) ->
-                                                    let rpart = intercalate " <| " . map show . reverse $ fr
-                                                        ppart = intercalate " <| " . map show . reverse $ fp
-                                                     in if null fp then
-                                                          fmtFixOnly n rpart
-                                                        else if null fr then
-                                                          fmtPathOnly n ppart
-                                                        else
-                                                          fmtMeasure n rpart ppart) $
-                                                  zip measNames meas)
-                _ <- if null mat
-                      then putStrLn "\n[]"
-                      else putStrLn "\n" >> putStrLn (prettyMatrix mat)
+                _ <- if not (null meas)
+                     then putStr "\n" >> putStrLn (
+                            intercalate "\n" .
+                            map
+                              (\(n,(fp, fr)) ->
+                                let rpart = intercalate " <| " . map show . reverse $ fr
+                                    ppart = intercalate " <| " . map show . reverse $ fp
+                                  in if null fp then
+                                      fmtFixOnly n rpart
+                                    else if null fr then
+                                      fmtPathOnly n ppart
+                                    else
+                                      fmtMeasure n rpart ppart) .
+                              zip measNames $
+                              meas)
+                     else return ()
                 _ <- putStrLn ""
+                _ <- if null mat
+                      then putStrLn "[]"
+                      else putStrLn (prettyMatrix mat)
+                _ <- putStr "\n"
                 return ())
             (M.toAscList fnMeasAndMat)
         PhDatSoln fnress ->
