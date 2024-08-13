@@ -177,18 +177,18 @@ matrixify name fundef = (measures, matrix)
       |> nub
     matrix :: [[Entry]]
     matrix = {- traceShowId $ -}
-      mapMaybe
-        (\(a,bs) ->
-          if null bs
-          then Nothing
-          else Just $
-            foldr
-              (\(p,b) ->
-                let ks = map (\m -> Num p `entryMult` approxSub m a b) measures
-                in zipWith entryPlus ks)
-              (replicate (length measures) (Num 0))
-              bs)
-        argpairs
+      argpairs
+      |> mapMaybe
+          (\(a,bs) ->
+            if null bs
+            then Nothing
+            else Just $
+              foldr
+                (\(p,b) ->
+                  let ks = map (\m -> Num p `entryMult` approxSub m a b) measures
+                  in zipWith entryPlus ks)
+                (replicate (length measures) (Num 0))
+                bs)
       -- (\m ->
       --   concatMap
       --     (\(a,bs) -> map (\(_,b) -> approxSub m a b) bs)
