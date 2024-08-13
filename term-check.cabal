@@ -17,6 +17,7 @@ executable term-check
     other-modules:    TerminationChecking.Exec
                     , TerminationChecking.Lang
                     , TerminationChecking.Measure
+                    , TerminationChecking.Misc
                     , TerminationChecking.Parser
                     , TerminationChecking.Solver
     other-extensions: LambdaCase
