@@ -12,7 +12,8 @@ import Data.List (splitAt, replicate, sort, partition, transpose)
 import Data.Maybe (mapMaybe)
 import Data.Bifunctor (bimap, first, second)
 import Data.Ratio ((%), numerator, denominator)
-import Numeric.LinearAlgebra (vector, (#>), (<#), toList, toLists, fromList, fromLists, tr, ident)
+import Numeric.LinearAlgebra (
+  Matrix, (#>), (<#), vector, toList, toLists, fromList, fromLists, tr, ident)
 import Numeric.LinearProgramming
 import Text.Parsec (parse)
 
@@ -73,7 +74,7 @@ snoc (x:xs) y = x : (snoc xs y)
 type TermResult m = Maybe [[(Integer, m)]]
 
 -- A matrix of numbers, represented as a list of columns
-type NumMatrix = [[Double]]
+type NumMatrix = [[Rational]]
 
 -- A matrix of entries, represented as a list of columns
 type TMatrix = [[Entry]]
@@ -113,8 +114,9 @@ type TMatrix = [[Entry]]
     0 <= y <= 1
 -}
 lin :: NumMatrix -> ([Double], [Bool])
-lin numMat =
-  let -- Switch from list of columns to list of rows
+lin mat =
+  let numMat = map (map fromRational) mat
+      -- Switch from list of columns to list of rows
       rows = transpose numMat
       -- useful lengths
       lenX = length numMat
@@ -152,8 +154,7 @@ numericFilterMatrix m =
   let mIndexed = enumerate m
       (numericCols, mixedCols) = partition (all isNum . snd) mIndexed
       (numericIdxs, numericMatrix) = second (map (map theNum)) $ unzip numericCols
-   in
-    (numericIdxs, numericMatrix)
+  in (numericIdxs, numericMatrix)
 
 {-
   Do the linear/lexicographic loop

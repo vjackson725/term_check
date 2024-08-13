@@ -27,7 +27,7 @@ data Term v =
   TNatLit Integer |
   TPair (Term v) (Term v) |
   TIf (Term v) (Term v) (Term v) |
-  TPChoice Double (Term v) (Term v) |
+  TPChoice Rational (Term v) (Term v) |
   TApp (Term v) (Term v) |
   TSumL (Term v) |
   TSumR (Term v) |

@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections,  ScopedTypeVariables #-}
 
 module TerminationChecking.Exec
   (
@@ -14,6 +14,7 @@ import Data.Bifunctor (bimap, first, second)
 import Data.Maybe (mapMaybe, maybeToList, fromMaybe)
 import Data.List (nub, permutations)
 import Data.Set (Set)
+import Data.Ratio ((%))
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -81,45 +82,64 @@ eval st (TOp _) = error "undefined"
 -- Term decrease matrix construction algorithm
 --
 
-termToCallterms :: Term v -> [(v, Term v)]
-termToCallterms = snd . termToCalltermsAux
-  where
-    termToCalltermsAux :: Term v -> (Term v, [(v, Term v)])
-    termToCalltermsAux a@(TVar x)   = (a, [])
-    termToCalltermsAux a@TUnit      = (a, [])
-    termToCalltermsAux a@TNatLit{}  = (a, [])
-    termToCalltermsAux a@TBoolLit{} = (a, [])
-    termToCalltermsAux (TPair t0 t1) =
-      let (a0, a0s) = termToCalltermsAux t0
-          (a1, a1s) = termToCalltermsAux t1
-      in (TPair a0 a1, a0s ++ a1s)
-    termToCalltermsAux (TSumL t) = first TSumL $ termToCalltermsAux t
-    termToCalltermsAux (TSumR t) = first TSumR $ termToCalltermsAux t
-    termToCalltermsAux (TRoll t) = first TRoll $ termToCalltermsAux t
-    termToCalltermsAux (TApp (TVar f) t) =
-      (TUnit, uncurry (:) $ first (f,) $ termToCalltermsAux t)
-    termToCalltermsAux (TApp t0 t1) =
-      let (_, as) = termToCalltermsAux t0
-          (_, bs) = termToCalltermsAux t1
-      in (TUnit, as ++ bs)
-    -- TODO: in the TApp cases, the value is not actually TUnit, though it might
-    --       be fine.
-    termToCalltermsAux (TOp v) = error "undefined"
-    termToCalltermsAux (TIf tc tt tf) = error "undefined"
+type ProbTerm v = (Rational, Term v)
 
-data Entry = Num Double | Inf
+termToCallterms :: Term v -> [(v, ProbTerm v)]
+termToCallterms (TVar x)   = []
+termToCallterms TUnit      = []
+termToCallterms TNatLit{}  = []
+termToCallterms TBoolLit{} = []
+termToCallterms (TPair t0 t1) =
+  termToCallterms t0 ++ termToCallterms t1
+termToCallterms (TSumL t) = termToCallterms t
+termToCallterms (TSumR t) = termToCallterms t
+termToCallterms (TRoll t) = termToCallterms t
+termToCallterms (TApp (TVar f) t) =
+  (f, (1 % 1, t)) : termToCallterms t
+termToCallterms (TApp t0 t1) =
+  termToCallterms t0 ++ termToCallterms t1
+termToCallterms (TOp v) = error "undefined"
+termToCallterms (TIf tc tt tf) =
+  termToCallterms tt ++ termToCallterms tf
+termToCallterms (TPChoice p t0 t1) =
+  map (second (first ((*) p))) (termToCallterms t0)
+  ++ map (second (first ((*) (1 - p)))) (termToCallterms t1)
+
+data Entry = Num Rational | Inf
   deriving (Show, Eq)
 
 isNum :: Entry -> Bool
 isNum Num{} = True
 isNum _ = False
 
-theNum :: Entry -> Double
+theNum :: Entry -> Rational
 theNum (Num x) = x
 
 isInf :: Entry -> Bool
 isInf Inf{} = True
 isInf _ = False
+
+approxSub :: (Show v, Eq v) => Measure -> Pattern v -> Term v -> Entry
+approxSub m a b =
+  let (ka, mmta) = runMeasure m (patternToTerm a)
+      (kb, mmtb) = runMeasure m b
+  in {- trace (show (ka, mmta) ++ " <? " ++ show (kb, mmtb)) $ -}
+      (if (mmta == mmtb || (not (null mmta) && null mmtb))
+        -- Case 1: kb + |x| - (ka + |x|) == kb - ka
+        -- Case 2: kb - (ka + |x|) <= kb - ka
+        then Num (fromInteger (kb - ka))
+      else Inf)
+
+-- This is probably the wrong behaviour
+entryPlus :: Entry -> Entry -> Entry
+entryPlus (Num x) (Num y) = Num (x + y)
+entryPlus Inf y = Inf
+entryPlus x Inf = Inf
+
+entryMult :: Entry -> Entry -> Entry
+entryMult (Num x) (Num y) = Num (x * y)
+entryMult _ Inf = Inf
+entryMult Inf _ = Inf
 
 {-
   Turns a function definition (along with the name of the function) into an
@@ -137,31 +157,39 @@ isInf _ = False
       the measure we can return later, although we don't do so at the moment.)
   4. These reduced values are the entries in the output entry matrix.
 -}
-matrixify :: (Show v, Eq v) => v -> FunDef v -> ([Measure], [[Entry]])
+matrixify :: forall v. (Show v, Eq v) => v -> FunDef v -> ([Measure], [[Entry]])
 matrixify name fundef = (measures, matrix)
   where
+    argpairs :: [(Pattern v,[(Rational,Term v)])]
     argpairs =
       fundef
-      |> concatMap
-        (\(argp,t) ->
-          let callterms = mapMaybe
-                            (\(fn, t) -> if fn == name then Just t else Nothing)
-                            (termToCallterms t)
-          in map (argp,) callterms)
-    measures = {- traceShowId $ -} nub . concatMap (uncurry makeMeasures) $ argpairs
-    reduced = {- traceShowId $ -}
-      map
-        (\m ->
-          (m, map
-            (\(a, b) ->
-              let (ka, mmta) = runMeasure m (patternToTerm a)
-                  (kb, mmtb) = runMeasure m b
-              in {- trace (show (ka, mmta) ++ " <? " ++ show (kb, mmtb)) $ -}
-                  (if (mmta == mmtb || (not (null mmta) && null mmtb))
-                    -- Case 1: kb + |x| - (ka + |x|) == kb - ka
-                    -- Case 2: kb - (ka + |x|) <= kb - ka
-                    then Num (fromInteger (kb - ka))
-                  else Inf))
-          argpairs))
-        measures
-    matrix = map snd reduced
+      |> map
+          (\(argp,t) ->
+            let callterms =
+                  mapMaybe
+                    (\(fn, pt) -> if fn == name then Just pt else Nothing)
+                    (termToCallterms t)
+            in (argp, callterms))
+    measures :: [Measure]
+    measures = {- traceShowId $ -}
+      argpairs
+      |> concatMap (\(pat,ts) -> concatMap (\(_,t) -> makeMeasures pat t) ts)
+      |> nub
+    matrix :: [[Entry]]
+    matrix = {- traceShowId $ -}
+      mapMaybe
+        (\(a,bs) ->
+          if null bs
+          then Nothing
+          else Just $
+            foldr
+              (\(p,b) ->
+                let ks = map (\m -> Num p `entryMult` approxSub m a b) measures
+                in zipWith entryPlus ks)
+              (replicate (length measures) (Num 0))
+              bs)
+        argpairs
+      -- (\m ->
+      --   concatMap
+      --     (\(a,bs) -> map (\(_,b) -> approxSub m a b) bs)
+      --     argpairs)

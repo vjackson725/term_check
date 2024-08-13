@@ -146,7 +146,7 @@ single_term_parser =
         try (symbol "if"   *> term_parser) <*>
         try (symbol "then" *> term_parser) <*>
         try (symbol "else" *> term_parser)) <?> "term if-then-else")
-  <|> ((TPChoice <$>
+  <|> ((TPChoice . toRational <$>
         try (symbol "pchoice" *> braces float) <*>
         try (symbol "then"    *> term_parser) <*>
         try (symbol "else"    *> term_parser)) <?> "term pchoice")
