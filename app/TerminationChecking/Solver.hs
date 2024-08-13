@@ -127,7 +127,7 @@ lin numMat =
       constrMat = zipWith (++) rows idMat
       constr = Dense $ map (:<=: 0) constrMat
       -- set up bounds
-      bounds = map (\x -> x :&: (0,1)) [lenX + 1..lenX + lenY]
+      bounds = map (:&: (0,1)) [lenX + 1..lenX + lenY]
       -- solve the problem
       solution = exact prob constr bounds
   in
@@ -164,7 +164,7 @@ calculateTerminationMeasure measures mat out =
     let (is, matNumeric) = {- traceShowId $ -} numericFilterMatrix mat
     guard (not (null is))
     let (weights, sol) = {- traceShowId $ -} first (map toRational) $ lin matNumeric
-        (isPicked, weightsPicked) = zip is weights |> filter (\(k, w) -> w > 0) |> unzip
+        (isPicked, weightsPicked) = zip is weights |> filter ((0 <) . snd) |> unzip
     guard (not (null isPicked))
     let rowsToElim = map fst . filter snd . enumerate $ sol
         weightedMeasures = {- traceShowId $ -} zip weightsPicked (selectIdxs isPicked measures)
