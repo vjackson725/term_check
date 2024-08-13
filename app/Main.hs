@@ -173,8 +173,9 @@ main =
                                                         else
                                                           fmtMeasure n rpart ppart) $
                                                   zip measNames meas)
-                _ <- putStrLn "\n"
-                _ <- putStrLn (prettyMatrix mat)
+                _ <- if null mat
+                      then putStrLn "\n[]"
+                      else putStrLn "\n" >> putStrLn (prettyMatrix mat)
                 _ <- putStrLn ""
                 return ())
             (M.toAscList fnMeasAndMat)
