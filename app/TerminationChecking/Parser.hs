@@ -38,6 +38,7 @@ lexer =
       , "False"
       , "Roll"
       , "if"
+      , "pchoice"
       , "then"
       , "else"
       ]
@@ -147,7 +148,7 @@ single_term_parser =
         try (symbol "then" *> term_parser) <*>
         try (symbol "else" *> term_parser)) <?> "term if-then-else")
   <|> ((TPChoice . toRational <$>
-        try (symbol "pchoice" *> braces float) <*>
+        try (symbol "pchoice" *> float) <*>
         try (symbol "then"    *> term_parser) <*>
         try (symbol "else"    *> term_parser)) <?> "term pchoice")
   <|> try (TBoolLit <$> (symbol "False" *> return False) <?> "term False literal")
