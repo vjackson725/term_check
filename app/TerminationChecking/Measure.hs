@@ -25,7 +25,8 @@ data MeasureStep =
   MSumR |
   MRoll |
   MLLtR |
-  MRLtL
+  MRLtL |
+  MConst Rational
   deriving (Show, Eq, Ord)
 
 -- (Base measure, Recursive measure)
@@ -54,7 +55,7 @@ makeRawMeasures = aux []
     aux :: Eq v => [MeasureStep] -> Pattern v -> Term v -> [Measure]
     aux m p (TVar x) = map (reverse m,) $ measureRecursive x (patternToTerm p)
     aux m (PVar x) t = map (reverse m,) $ measureRecursive x t
-    aux _ PUnit TUnit = []
+    aux m PUnit TUnit = [(reverse (MConst 0 : m), [])]
     aux _ (PBoolLit b0) (TBoolLit b1) = []
     aux _ (PNatLit n0) (TNatLit n1) = []
     aux m (PPair a0 a1) (TPair b0 b1) =
