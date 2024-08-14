@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections,  ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections,  ScopedTypeVariables, LambdaCase #-}
 
 module TerminationChecking.Exec
   (
@@ -11,8 +11,10 @@ module TerminationChecking.Exec
 where
 
 import Data.Bifunctor (bimap, first, second)
+import Data.Bifoldable (bifoldr)
 import Data.Maybe (mapMaybe, maybeToList, fromMaybe)
 import Data.List (nub, permutations)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Set (Set)
 import Data.Ratio ((%))
 import qualified Data.Set as Set
@@ -23,6 +25,7 @@ import Debug.Trace
 
 import TerminationChecking.Lang
 import TerminationChecking.Measure
+import TerminationChecking.Misc
 
 --
 -- Execution Semantics
@@ -105,6 +108,23 @@ termToCallterms (TPChoice p t0 t1) =
   map (second (first ((*) p))) (termToCallterms t0)
   ++ map (second (first ((*) (1 - p)))) (termToCallterms t1)
 
+-- -- polynomials with a single variable, represented as sum of powers,
+-- -- inner list indexed by the power
+-- type ArithPoly = [[Rational]]
+
+-- levelProd f init xs ys =
+--   let n1 = length xs
+--       n2 = length ys
+--   in [foldr (curry f) init [(xs !! i, ys !! j) | i <- [0..n1+n2], let j = i - n1]]
+
+-- apAdd :: ArithPoly -> ArithPoly -> ArithPoly
+-- apAdd p1 p2 = levelProd (*) 1 p1 p2
+
+-- apMul :: ArithPoly -> ArithPoly -> ArithPoly
+-- apMul p1 p2 = levelProd (*) 1 p1 p2
+
+-- apNeg = apMul (APNum -1)
+
 data Entry = Num Rational | Inf
   deriving (Show, Eq)
 
@@ -119,27 +139,22 @@ isInf :: Entry -> Bool
 isInf Inf{} = True
 isInf _ = False
 
-approxSub :: (Show v, Eq v) => Measure -> Pattern v -> Term v -> Entry
-approxSub m a b =
-  let (ka, mmta) = runMeasure m (patternToTerm a)
-      (kb, mmtb) = runMeasure m b
-  in {- trace (show (ka, mmta) ++ " <? " ++ show (kb, mmtb)) $ -}
-      (if (mmta == mmtb || (not (null mmta) && null mmtb))
-        -- Case 1: kb + |x| - (ka + |x|) == kb - ka
-        -- Case 2: kb - (ka + |x|) <= kb - ka
-        then Num (fromInteger (kb - ka))
-      else Inf)
-
--- This is probably the wrong behaviour
-entryPlus :: Entry -> Entry -> Entry
-entryPlus (Num x) (Num y) = Num (x + y)
-entryPlus Inf y = Inf
-entryPlus x Inf = Inf
-
-entryMult :: Entry -> Entry -> Entry
-entryMult (Num x) (Num y) = Num (x * y)
-entryMult _ Inf = Inf
-entryMult Inf _ = Inf
+approxSub :: (Show v, Eq v) =>
+  (Rational, Rational, Maybe (Measure, Term v)) ->
+  (Rational, Maybe (Measure, Term v)) ->
+  Entry
+approxSub (p, x, ta) (y, tb)
+  | p <= 0 || p > 1
+  = error "approxSub precondition violation"
+  | (ta == tb && p == 1) || null tb
+      -- Case 1: x + p*|t| - (y + |t|)
+      --         == (x - y) + (p-1)*|t|
+      --         == (x - y)             (when p == 1)
+      -- Case 2a: x + p*|ta| - y <= x - y
+      -- Case 2b: x - y
+  = Num (x - y)
+  | otherwise
+  = Inf
 
 {-
   Turns a function definition (along with the name of the function) into an
@@ -182,14 +197,37 @@ matrixify name fundef = (measures, matrix)
           (\(a,bs) ->
             if null bs
             then Nothing
-            else Just $
-              foldr
-                (\(p,b) ->
-                  let ks = map (\m -> Num p `entryMult` approxSub m a b) measures
-                  in zipWith entryPlus ks)
-                (replicate (length measures) (Num 0))
-                bs)
-      -- (\m ->
-      --   concatMap
-      --     (\(a,bs) -> map (\(_,b) -> approxSub m a b) bs)
-      --     argpairs)
+            else
+              let colHeaders :: [((Rational, MeasureApp v), [((Rational, Rational), MeasureApp v)])]
+                  colHeaders = map (\m -> (runMeasure m (patternToTerm a), [])) measures
+                  mesRecCallRow :: [((Rational,MeasureApp v), [((Rational, Rational), MeasureApp v)])]
+                  mesRecCallRow = {- traceShowId $ -}
+                    foldr
+                      (\(p,b) ->
+                        let ks :: [((Rational, Rational), MeasureApp v)]
+                            -- p*(x + m t) represented as ((p, x), m t)
+                            ks = map
+                                  (\m -> (\(x,m) -> ((p,x),m)) $ runMeasure m b)
+                                  measures
+                        in zipWith (\pb -> second (pb:)) ks)
+                      colHeaders
+                      bs
+                  subtractedRow :: [Entry]
+                  subtractedRow =
+                    map
+                      (\case
+                          (ra, bs::[((Rational,Rational), MeasureApp v)]) ->
+                            let grouped :: [(MeasureApp v, NonEmpty (Rational, Rational))]
+                                grouped = groupOnSnd bs
+                                reduced :: [(MeasureApp v, (Rational, Rational))]
+                                reduced = map
+                                            (second
+                                              (foldr
+                                                (\(p,x) (pp,xx) -> (p + pp, p*x + xx))
+                                                (0, 0)))
+                                            grouped
+                            in case reduced of
+                                  [(mb,(pp,x))] -> approxSub (pp,x,mb) ra
+                                  _ -> Inf)
+                      mesRecCallRow
+              in Just subtractedRow)

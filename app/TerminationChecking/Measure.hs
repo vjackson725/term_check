@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module TerminationChecking.Measure
-  (Measure, makeMeasures, runMeasure)
+  (Measure, MeasureApp, makeMeasures, runMeasure)
 where
 
 import Debug.Trace
@@ -55,7 +55,7 @@ makeRawMeasures = aux []
     aux :: Eq v => [MeasureStep] -> Pattern v -> Term v -> [Measure]
     aux m p (TVar x) = map (reverse m,) $ measureRecursive x (patternToTerm p)
     aux m (PVar x) t = map (reverse m,) $ measureRecursive x t
-    aux m PUnit TUnit = [(reverse (MConst 0 : m), [])]
+    aux m PUnit TUnit = [(reverse (MConst 1 : m), [])]
     aux _ (PBoolLit b0) (TBoolLit b1) = []
     aux _ (PNatLit n0) (TNatLit n1) = []
     aux m (PPair a0 a1) (TPair b0 b1) =
@@ -119,17 +119,18 @@ makeMeasures p t =
   it is not a match for.
 -}
 
+type MeasureApp v = Maybe (Measure, Term v)
 
-runMeasure :: (Show v, Eq v) => Measure -> Term v -> (Integer, Maybe (Measure, Term v))
+runMeasure :: (Show v, Eq v) => Measure -> Term v -> (Rational, MeasureApp v)
 runMeasure m t = runMeasureAux 0 m t
   where
-    runMeasureAux :: (Show v, Eq v) => Integer -> Measure -> Term v -> (Integer, Maybe (Measure, Term v))
+    runMeasureAux :: (Show v, Eq v) => Rational -> Measure -> Term v -> (Rational, Maybe (Measure, Term v))
     runMeasureAux k (MPairL : mb, mr) (TPair ta _) = runMeasureAux k (mb, mr) ta
     runMeasureAux k (MPairR : mb, mr) (TPair _ tb) = runMeasureAux k (mb, mr) tb
     runMeasureAux k (MSumL  : mb, mr) (TSumL t) = runMeasureAux k (mb, mr) t
     runMeasureAux k (MSumR  : mb, mr) (TSumR t) = runMeasureAux k (mb, mr) t
     runMeasureAux k (MRoll  : mb, mr) (TRoll t) = runMeasureAux (k+1) (mb, mr) t
-    runMeasureAux k (MNat   : mb, mr) (TNatLit m) | m >= 0  = (k + m, Nothing)
+    runMeasureAux k (MNat   : mb, mr) (TNatLit m) | m >= 0  = (k + fromInteger m, Nothing)
     runMeasureAux k (MBool  : mb, mr) (TBoolLit b) = (k, Nothing)
     runMeasureAux k (MSumR  : mb, mr) TSumL{} = (k, Nothing)
     runMeasureAux k (MSumL  : mb, mr) TSumR{} = (k, Nothing)
@@ -137,13 +138,14 @@ runMeasure m t = runMeasureAux 0 m t
     runMeasureAux k (MRLtL  : mb, mr) TSumR{} = (k, Nothing)
     runMeasureAux k (MLLtR  : mb, mr) TSumR{} = (k+1, Nothing)
     runMeasureAux k (MRLtL  : mb, mr) TSumL{} = (k+1, Nothing)
+    runMeasureAux k (MConst x : mb, mr) _ = (k+x, Nothing)
     runMeasureAux k m@(_:_, _) t = (k, Just (m, t))
     runMeasureAux k ([], mr@(MPairL : mr')) (TPair ta _) = runMeasureAux k (mr', mr) ta
     runMeasureAux k ([], mr@(MPairR : mr')) (TPair _ tb) = runMeasureAux k (mr', mr) tb
     runMeasureAux k ([], mr@(MSumL  : mr')) (TSumL t) = runMeasureAux k (mr', mr) t
     runMeasureAux k ([], mr@(MSumR  : mr')) (TSumR t) = runMeasureAux k (mr', mr) t
     runMeasureAux k ([], mr@(MRoll  : mr')) (TRoll t) = runMeasureAux (k+1) (mr', mr) t
-    runMeasureAux k ([], mr@(MNat   : mr')) (TNatLit m) | 0 <= m = (k + m, Nothing)
+    runMeasureAux k ([], mr@(MNat   : mr')) (TNatLit m) | 0 <= m = (k + fromInteger m, Nothing)
     runMeasureAux k ([], mr@(MBool  : mr')) (TBoolLit b) = (k, Nothing)
     runMeasureAux k ([], mr@(MSumR  : mr')) TSumL{} = (k, Nothing)
     runMeasureAux k ([], mr@(MSumL  : mr')) TSumR{} = (k, Nothing)
