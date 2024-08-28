@@ -146,10 +146,10 @@ approxSub :: (Show v, Eq v) =>
 approxSub (p, x, ta) (y, tb)
   | p <= 0 || p > 1
   = error "approxSub precondition violation"
-  | (ta == tb && p == 1) || null tb
+  | ta == tb || null tb
       -- Case 1: x + p*|t| - (y + |t|)
       --         == (x - y) + (p-1)*|t|
-      --         == (x - y)             (when p == 1)
+      --         <= (x - y)
       -- Case 2a: x + p*|ta| - y <= x - y
       -- Case 2b: x - y
   = Num (x - y)
@@ -176,7 +176,7 @@ matrixify :: forall v. (Show v, Eq v) => v -> FunDef v -> ([Measure], [[Entry]])
 matrixify name fundef = (measures, matrix)
   where
     argpairs :: [(Pattern v,[(Rational,Term v)])]
-    argpairs =
+    argpairs = {- traceShowId $ -}
       fundef
       |> map
           (\(argp,t) ->
@@ -199,7 +199,8 @@ matrixify name fundef = (measures, matrix)
             then Nothing
             else
               let colHeaders :: [((Rational, MeasureApp v), [((Rational, Rational), MeasureApp v)])]
-                  colHeaders = map (\m -> (runMeasure m (patternToTerm a), [])) measures
+                  colHeaders = {- traceWith (intercalate "\n" . map show) $ -}
+                    map (\m -> (runMeasure m (patternToTerm a), [])) measures
                   mesRecCallRow :: [((Rational,MeasureApp v), [((Rational, Rational), MeasureApp v)])]
                   mesRecCallRow = {- traceShowId $ -}
                     foldr
@@ -213,7 +214,7 @@ matrixify name fundef = (measures, matrix)
                       colHeaders
                       bs
                   subtractedRow :: [Entry]
-                  subtractedRow =
+                  subtractedRow = {- traceShowId $ -}
                     map
                       (\case
                           (ra, bs::[((Rational,Rational), MeasureApp v)]) ->
@@ -227,7 +228,11 @@ matrixify name fundef = (measures, matrix)
                                                 (0, 0)))
                                             grouped
                             in case reduced of
-                                  [(mb,(pp,x))] -> approxSub (pp,x,mb) ra
+                                  [(mb,(pp,x))] ->
+                                    approxSub (pp,x,mb) ra
+                                  -- two cases: empty list, or more than one;
+                                  -- in either case, we must approximate the
+                                  -- change as infinite.
                                   _ -> Inf)
                       mesRecCallRow
               in Just subtractedRow)
