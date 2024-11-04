@@ -1,3 +1,4 @@
+{- HLINT ignore "Use camelCase" -}
 
 module TerminationChecking.Parser
   (Prog, parse_program)
@@ -14,6 +15,7 @@ import qualified Text.ParserCombinators.Parsec.Token as P
 import Debug.Trace (traceShowId)
 
 import TerminationChecking.Lang
+import TerminationChecking.Misc (Prob(Prob))
 
 --
 -- Parsec provided language parsing
@@ -147,7 +149,7 @@ single_term_parser =
         try (symbol "if"   *> term_parser) <*>
         try (symbol "then" *> term_parser) <*>
         try (symbol "else" *> term_parser)) <?> "term if-then-else")
-  <|> ((TPChoice . toRational <$>
+  <|> ((TPChoice . Prob . toRational <$>
         try (symbol "pchoice" *> float) <*>
         try (symbol "then"    *> term_parser) <*>
         try (symbol "else"    *> term_parser)) <?> "term pchoice")

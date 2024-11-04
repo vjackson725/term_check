@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections,  ScopedTypeVariables, LambdaCase #-}
+{-# LANGUAGE TupleSections, ScopedTypeVariables, LambdaCase, DeriveFunctor, DeriveFoldable #-}
 
 module TerminationChecking.Exec
   (
@@ -81,49 +81,13 @@ eval st (TSumL e) = VSumL (eval st e)
 eval st (TSumR e) = VSumR (eval st e)
 eval st (TOp _) = error "undefined"
 
+-------------------------------------------------
+-- Term decrease matrix construction algorithm --
+-------------------------------------------------
+
 --
--- Term decrease matrix construction algorithm
+-- Matrix Entries
 --
-
-type ProbTerm v = (Rational, Term v)
-
-termToCallterms :: Term v -> [(v, ProbTerm v)]
-termToCallterms (TVar x)   = []
-termToCallterms TUnit      = []
-termToCallterms TNatLit{}  = []
-termToCallterms TBoolLit{} = []
-termToCallterms (TPair t0 t1) =
-  termToCallterms t0 ++ termToCallterms t1
-termToCallterms (TSumL t) = termToCallterms t
-termToCallterms (TSumR t) = termToCallterms t
-termToCallterms (TRoll t) = termToCallterms t
-termToCallterms (TApp (TVar f) t) =
-  (f, (1 % 1, t)) : termToCallterms t
-termToCallterms (TApp t0 t1) =
-  termToCallterms t0 ++ termToCallterms t1
-termToCallterms (TOp v) = error "undefined"
-termToCallterms (TIf tc tt tf) =
-  termToCallterms tt ++ termToCallterms tf
-termToCallterms (TPChoice p t0 t1) =
-  map (second (first ((*) p))) (termToCallterms t0)
-  ++ map (second (first ((*) (1 - p)))) (termToCallterms t1)
-
--- -- polynomials with a single variable, represented as sum of powers,
--- -- inner list indexed by the power
--- type ArithPoly = [[Rational]]
-
--- levelProd f init xs ys =
---   let n1 = length xs
---       n2 = length ys
---   in [foldr (curry f) init [(xs !! i, ys !! j) | i <- [0..n1+n2], let j = i - n1]]
-
--- apAdd :: ArithPoly -> ArithPoly -> ArithPoly
--- apAdd p1 p2 = levelProd (*) 1 p1 p2
-
--- apMul :: ArithPoly -> ArithPoly -> ArithPoly
--- apMul p1 p2 = levelProd (*) 1 p1 p2
-
--- apNeg = apMul (APNum -1)
 
 data Entry = Num Rational | Inf
   deriving (Show, Eq)
@@ -139,22 +103,128 @@ isInf :: Entry -> Bool
 isInf Inf{} = True
 isInf _ = False
 
+--
+-- Approximate Substitution
+--
+
 approxSub :: (Show v, Eq v) =>
-  (Rational, Rational, Maybe (Measure, Term v)) ->
+  (Prob, Rational, Maybe (Measure, Term v)) ->
   (Rational, Maybe (Measure, Term v)) ->
   Entry
 approxSub (p, x, ta) (y, tb)
-  | p <= 0 || p > 1
-  = error "approxSub precondition violation"
-  | ta == tb || null tb
+  | p <= 0
+  = error "approxSub precondition violation, p <= 0"
+  | p > 1
+  = error "approxSub precondition violation, p > 1"
+  | (ta == tb && p == 1) || null tb
       -- Case 1: x + p*|t| - (y + |t|)
       --         == (x - y) + (p-1)*|t|
-      --         <= (x - y)
+      --         == (x - y)             (when p == 1)
       -- Case 2a: x + p*|ta| - y <= x - y
       -- Case 2b: x - y
   = Num (x - y)
   | otherwise
   = Inf
+
+--
+-- Choice Tree
+--
+
+-- | The choice tree datastructure is a representation of the 'choice structure'
+--   of a recursive function, that being a reflection of the structure of the
+--   term, except only paying attention to the probabilistic choice, and
+--   erasing the differences between constructors.
+--     We use this datastructure to extract the argument structure of recursive
+--   functions together with the probability of tthat recursive call occuring.
+data ChoiceTree a =
+  ProbChoice Prob (ChoiceTree a) (ChoiceTree a) |
+  Split (ChoiceTree a) (ChoiceTree a) |
+  DataLeaf a |
+  EmptyLeaf
+  deriving (Eq, Show, Functor, Foldable)
+
+extractChoiceTreeTm :: Eq v => v -> Term v -> ChoiceTree (Term v)
+extractChoiceTreeTm funnm = aux
+  where
+    aux (TVar x)   = EmptyLeaf
+    aux TUnit      = EmptyLeaf
+    aux TNatLit{}  = EmptyLeaf
+    aux TBoolLit{} = EmptyLeaf
+    aux (TPair t0 t1) = Split (aux t0) (aux t1)
+    aux (TSumL t) = aux t
+    aux (TSumR t) = aux t
+    aux (TRoll t) = aux t
+    aux (TApp (TVar f) t) | f == funnm = Split (DataLeaf t) (aux t)
+                          | otherwise  = aux t
+    aux (TApp t0 t1) = Split (aux t0) (aux t1)
+    aux (TOp opnm) = error "undefined"
+    aux (TIf tc tt tf) = Split (aux tt) (aux tf)
+    aux (TPChoice p t0 t1) = ProbChoice p (aux t0) (aux t1)
+
+extractChoiceTrees :: Eq v => v -> FunDef v -> [(Pattern v, ChoiceTree (Term v))]
+extractChoiceTrees funnm = map (second (extractChoiceTreeTm funnm))
+
+-- | A condensed choice tree, with splits all distributed to the toplevel.
+type CondensedChoiceTree a = [[(Prob, a)]]
+
+-- | A choice tree is condensed by weighting each datum by the probability it
+--   occurs, and taking _all combinations_ of data from different sides of a
+--   split.
+condenseChoiceTree :: ChoiceTree a -> CondensedChoiceTree a
+condenseChoiceTree (ProbChoice p a b) =
+  do
+    ca <- condenseChoiceTree a
+    cb <- condenseChoiceTree b
+    return $ map (first (p *)) ca ++ map (first ((1-p) *)) cb
+condenseChoiceTree (Split a b) = condenseChoiceTree a ++ condenseChoiceTree b
+condenseChoiceTree (DataLeaf x) = [[(1, x)]]
+-- NB: an empty leaf translates to _one_ pchoice, which is empty.
+condenseChoiceTree EmptyLeaf = [[]]
+
+--
+-- Matrixify
+--
+
+makeRow :: forall v. (Show v, Eq v) =>
+            [Measure]
+            -> Pattern v
+            -> [(Prob, Term v)]
+            -> Maybe [Entry]
+makeRow measures lArg rArgs
+  | null rArgs = Nothing
+  | otherwise =
+    let lArgMeasured :: [(Rational, MeasureApp v)]
+        lArgMeasured = map (\m -> runMeasure m (patternToTerm lArg)) measures
+        -- The outer list is an entry per each measure, the inner list is an entry
+        -- per each rArg.
+        rArgsMeasured :: [[((Prob, Rational), MeasureApp v)]]
+        rArgsMeasured =
+          map
+            (\m ->
+              map (\(p, tm) -> (\(x,m) -> ((p,x),m)) $ runMeasure m tm) rArgs)
+            measures
+        pairedMeasuredArgs ::
+          [((Rational, MeasureApp v), [((Prob, Rational), MeasureApp v)])]
+        pairedMeasuredArgs = zip lArgMeasured rArgsMeasured
+        subtractedRow :: [Entry]
+        subtractedRow =
+          map
+            (\case
+                (lRes, rRess) ->
+                  let grouped :: [(MeasureApp v, NonEmpty (Prob, Rational))]
+                      grouped = groupOnSnd rRess
+                      reduced :: [(MeasureApp v, (Prob, Rational))]
+                      reduced = map
+                                  (second
+                                    (foldr
+                                      (\(p,x) (pp,xx) -> (p + pp, runProb p*x + xx))
+                                      (0, 0)))
+                                  grouped
+                  in case reduced of
+                        [(mb,(pp,x))] -> approxSub (pp,x,mb) lRes
+                        _ -> Inf)
+            pairedMeasuredArgs
+    in Just subtractedRow
 
 {-
   Turns a function definition (along with the name of the function) into an
@@ -173,66 +243,16 @@ approxSub (p, x, ta) (y, tb)
   4. These reduced values are the entries in the output entry matrix.
 -}
 matrixify :: forall v. (Show v, Eq v) => v -> FunDef v -> ([Measure], [[Entry]])
-matrixify name fundef = (measures, matrix)
+matrixify funnm fundef = (measures, matrix)
   where
-    argpairs :: [(Pattern v,[(Rational,Term v)])]
-    argpairs = {- traceShowId $ -}
-      fundef
-      |> map
-          (\(argp,t) ->
-            let callterms =
-                  mapMaybe
-                    (\(fn, pt) -> if fn == name then Just pt else Nothing)
-                    (termToCallterms t)
-            in (argp, callterms))
+    argpairs :: [(Pattern v, [(Prob, Term v)])]
+    argpairs = concatMap (uncurry (\pat -> map (pat,) . condenseChoiceTree))
+                $ extractChoiceTrees funnm fundef
     measures :: [Measure]
     measures = {- traceShowId $ -}
       argpairs
-      |> concatMap (\(pat,ts) -> concatMap (\(_,t) -> makeMeasures pat t) ts)
+      |> concatMap (uncurry (\pat -> concatMap (makeMeasures pat . snd)))
       |> nub
     matrix :: [[Entry]]
     matrix = {- traceShowId $ -}
-      argpairs
-      |> mapMaybe
-          (\(a,bs) ->
-            if null bs
-            then Nothing
-            else
-              let colHeaders :: [((Rational, MeasureApp v), [((Rational, Rational), MeasureApp v)])]
-                  colHeaders = {- traceWith (intercalate "\n" . map show) $ -}
-                    map (\m -> (runMeasure m (patternToTerm a), [])) measures
-                  mesRecCallRow :: [((Rational,MeasureApp v), [((Rational, Rational), MeasureApp v)])]
-                  mesRecCallRow = {- traceShowId $ -}
-                    foldr
-                      (\(p,b) ->
-                        let ks :: [((Rational, Rational), MeasureApp v)]
-                            -- p*(x + m t) represented as ((p, x), m t)
-                            ks = map
-                                  (\m -> (\(x,m) -> ((p,x),m)) $ runMeasure m b)
-                                  measures
-                        in zipWith (\pb -> second (pb:)) ks)
-                      colHeaders
-                      bs
-                  subtractedRow :: [Entry]
-                  subtractedRow = {- traceShowId $ -}
-                    map
-                      (\case
-                          (ra, bs::[((Rational,Rational), MeasureApp v)]) ->
-                            let grouped :: [(MeasureApp v, NonEmpty (Rational, Rational))]
-                                grouped = groupOnSnd bs
-                                reduced :: [(MeasureApp v, (Rational, Rational))]
-                                reduced = map
-                                            (second
-                                              (foldr
-                                                (\(p,x) (pp,xx) -> (p + pp, p*x + xx))
-                                                (0, 0)))
-                                            grouped
-                            in case reduced of
-                                  [(mb,(pp,x))] ->
-                                    approxSub (pp,x,mb) ra
-                                  -- two cases: empty list, or more than one;
-                                  -- in either case, we must approximate the
-                                  -- change as infinite.
-                                  _ -> Inf)
-                      mesRecCallRow
-              in Just subtractedRow)
+      mapMaybe (uncurry (makeRow measures)) argpairs
